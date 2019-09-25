@@ -85,6 +85,9 @@ class OligoProbeBuilder(object):
 				continue
 			elif self.N == len(path):
 				pData = oData.iloc[path, :]
+				probe_size = pData['end'].values[0]-pData['start'].values[0]
+				if self.Ps < probe_size:
+					continue
 				Tm_range = pData['Tm'].max()-pData['Tm'].min()
 				if 2*self.Tr < Tm_range:
 					continue
@@ -94,6 +97,9 @@ class OligoProbeBuilder(object):
 				for j in range(len(path) - self.N + 1):
 					subpath = path[j:(j + self.N)]
 					pData = oData.iloc[subpath, :]
+					probe_size = pData['end'].values[0]-pData['start'].values[0]
+					if self.Ps < probe_size:
+						continue
 					Tm_range = pData['Tm'].max()-pData['Tm'].min()
 					if 2*self.Tr < Tm_range:
 						continue
