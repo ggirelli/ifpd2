@@ -511,6 +511,10 @@ class OligoWalker(OligoProbeBuilder):
 		score_thr = 0
 		oGroup.apply_threshold(score_thr)
 		nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
+		while 0 == nOligos_prev_score_thr and score_thr <= 1:
+			score_thr += self.Ot
+			oGroup.apply_threshold(score_thr)
+			nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
 
 		self.log.info(f"Set oligo score threshold at {score_thr:.3f}" +
 			f" ({nOligos_prev_score_thr} oligos usable)...")
@@ -575,6 +579,8 @@ class OligoGroup(Loggable):
 	
 	@property
 	def usable_oligos(self):
+		if isinstance(self.oligos_in_focus_window, type(None)):
+			return self.oligos_passing_score_filter
 		return np.logical_and(
 			self.oligos_in_focus_window,
 			self.oligos_passing_score_filter)
@@ -586,7 +592,7 @@ class OligoGroup(Loggable):
 			return self._data.loc[self.oligos_in_focus_window, :]
 
 	def get_n_focused_oligos(self, onlyUsable = False):
-		if isinstance(self.oligos_in_focus_window, type(None)):
+		if 0 == self.usable_oligos.sum():
 			return 0
 		return self.get_focused_oligos(onlyUsable).shape[0]
 
