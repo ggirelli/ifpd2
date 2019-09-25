@@ -419,9 +419,16 @@ class OligoWalker(OligoProbeBuilder):
 			ignore_index = True)
 		probe_df.to_csv(os.path.join(win_path, "probe_feat.tsv"), "\t")
 
+		pd.concat([p.data for p in probe_list]).drop_duplicates().to_csv(
+			os.path.join(win_path, "oligos.tsv"), "\t")
+
+		probe_paths = []
 		for pi in range(len(probe_list)):
-			probe_list[pi].data.to_csv(os.path.join(win_path,
-				f"probe_set.{pi}.tsv"), "\t")
+			probe_paths.append([",".join([str(x)
+				for x in probe_list[pi].data.index.tolist()])])
+		probe_paths = pd.DataFrame(probe_paths)
+		probe_paths.columns = ["cs_oligos"]
+		probe_paths.to_csv(os.path.join(win_path, "probe_paths.tsv"), "\t")
 
 		import sys; sys.exit()
 
