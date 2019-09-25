@@ -40,7 +40,7 @@ class Loggable(object):
 	def log(self):
 		return self._logger
 
-	def addFileHandler(self, path, mode="a+", level=logging.DEBUG):
+	def addFileHandler(self, path, mode="w+", level=logging.DEBUG):
 		fileHandler = logging.FileHandler(path, "a+")
 		fileHandler.setFormatter(self._formatter)
 		fileHandler.setLevel(level)
@@ -360,10 +360,16 @@ class OligoWalker(OligoProbeBuilder):
 		next(DBH)
 
 		self.current_oligos = []
-		self.probe_candidates = []
+		self.probe_candidates = {}
 
 		self.w = 0 # Window ID
+		self.__preprocess_window()
+		while self.__window_processed() and self.w < self.window_sets.shape[0]:
+			self.w += 1
+			self.__preprocess_window()
+
 		self.r = 0 # Record ID
+
 		pbDBH = tqdm(DBH, leave = None, desc = "Parsing records")
 		for oligo in pbDBH:
 			oligo = oligo.strip().split("\t")
@@ -374,7 +380,8 @@ class OligoWalker(OligoProbeBuilder):
 			oligo = pd.DataFrame(oligo).transpose()
 			oligo.columns = dtype
 
-			if oligo['start'].values[0] >= self.S: # Skip all oligos before this
+			start_of_current_window = self.window_sets['start'].values[self.w]
+			if oligo['start'].values[0] >= start_of_current_window:
 				end_of_current_window = self.window_sets['end'].values[self.w]
 				if oligo['start'].values[0] >= end_of_current_window:
 					pbDBH.clear()
@@ -410,7 +417,16 @@ class OligoWalker(OligoProbeBuilder):
 
 		return(probe_list)
 
-	def __select_from_window(self):
+	def __window_processed(self):
+		window = self.window_sets.iloc[self.w,:]
+		s = int(window['s'])
+		w = int(window['w'])
+		if s in self.probe_candidates.keys():
+			if w in self.probe_candidates[s].keys():
+				return isinstance(self.probe_candidates[s][w], list)
+		return False
+
+	def __preprocess_window(self):
 		window = self.window_sets.iloc[self.w,:]
 		window_tag = f"{int(window['s'])}.{int(window['w'])}"
 		window_range = f"[{int(window['start'])}:{int(window['end'])}]"
@@ -429,18 +445,35 @@ class OligoWalker(OligoProbeBuilder):
 			if not self.reuse:
 				shutil.rmtree(win_path)
 				os.mkdir(win_path)
+
 			win_file_path = os.path.join(win_path, "window.tsv")
 			win_done = os.path.isfile(os.path.join(win_path, ".done"))
+
 			if os.path.isfile(win_file_path) and win_done:
 				win = pd.read_csv(win_file_path, sep='\t',
 					header=None, index_col=0)
+
 				if (win.transpose().values == window.values).all():
 					self.log.info("Re-using previous results for window " +
 						f"{window_tag} {window_range}")
-					return(self.__import_window_output(win_path))
-		
-		window.to_csv(
-			os.path.join(win_path, "window.tsv"), sep = "\t", index = True)
+
+					if not int(window['s']) in self.probe_candidates.keys():
+						self.probe_candidates[int(window['s'])] = {}
+					self.probe_candidates[
+						int(window['s'])][int(window['w'])
+						] = self.__import_window_output(win_path)
+					return
+
+		window.to_csv(os.path.join(win_path, "window.tsv"),
+			sep = "\t", index = True)
+
+	def __select_from_window(self):
+		window = self.window_sets.iloc[self.w,:]
+		window_tag = f"{int(window['s'])}.{int(window['w'])}"
+		window_range = f"[{int(window['start'])}:{int(window['end'])}]"
+
+		set_path = os.path.join(self.out_path,f"set_{int(window['s'])}")
+		win_path = os.path.join(set_path,f"window_{int(window['w'])}")
 
 		self.addFileHandler(os.path.join(win_path, "window.log"))
 
@@ -478,7 +511,13 @@ class OligoWalker(OligoProbeBuilder):
 			self.current_oligos = [o for o in self.current_oligos
 				if o['start'].values[0] >= next_window_start]
 
-		return(probe_list)
+		if not int(window['s']) in self.probe_candidates.keys():
+			self.probe_candidates[int(window['s'])] = {}
+
+		self.probe_candidates[
+			int(window['s'])][int(window['w'])
+			] = self.__import_window_output(win_path)
+		return
 
 	def __build_probe_candidates(self, oGroup):
 		# Applies oligo filters to the oligo group,
