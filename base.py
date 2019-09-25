@@ -12,7 +12,7 @@
 
 out_path = "/mnt/data/COOLFISH/ifpd2_out/test"
 db_path = "/mnt/data/COOLFISH/mm10_chr18_selected_regions.tsv"
-force_out = True
+reuse = True
 
 # DEPENDENCIES =================================================================
 
@@ -152,6 +152,7 @@ class OligoWalker(OligoProbeBuilder):
 
 	db_path = None
 	out_path = "."
+	reuse = False
 
 	C = "chr18"			# Chromosome
 	S = int(3000000)	# Region start coordinate (included)
@@ -391,6 +392,24 @@ class OligoWalker(OligoProbeBuilder):
 
 		DBH.close()
 
+	def __import_window_output(self, win_path):
+		oPath = os.path.join(win_path, "oligos.tsv")
+		assert os.path.isfile(oPath)
+		pPath = os.path.join(win_path, "probe_paths.tsv")
+		assert os.path.isfile(pPath)
+		
+		oligos = pd.read_csv(oPath, "\t", index_col = 0)
+		paths = pd.read_csv(pPath, "\t", index_col = 0)
+
+		self.log.info(f"Loading {paths.shape[0]} probe candidates.")
+
+		probe_list = []
+		for p in paths.iloc[:, 0]:
+			probe_list.append(OligoProbe(oligos.loc[
+				[int(o) for o in p.split(",")]]))
+
+		return(probe_list)
+
 	def __select_from_window(self):
 		window = self.window_sets.iloc[self.w,:]
 		window_tag = f"{int(window['s'])}.{int(window['w'])}"
@@ -399,12 +418,28 @@ class OligoWalker(OligoProbeBuilder):
 		set_path = os.path.join(self.out_path,f"set_{int(window['s'])}")
 		if not os.path.isdir(set_path):
 			os.mkdir(set_path)
-			self.window_sets.loc[self.window_sets['s'] == window['s'],:].to_csv(
+			self.window_sets.loc[
+				self.window_sets['s'] == window['s'],:].to_csv(
 				os.path.join(set_path, "windows.tsv"), "\t")
 		win_path = os.path.join(set_path,f"window_{int(window['w'])}")
-		os.mkdir(win_path)
+
+		if not os.path.isdir(win_path):
+			os.mkdir(win_path)
+		else:
+			if not self.reuse:
+				shutil.rmtree(win_path)
+				os.mkdir(win_path)
+			win_file_path = os.path.join(win_path, "window.tsv")
+			win_done = os.path.isfile(os.path.join(win_path, ".done"))
+			if os.path.isfile(win_file_path) and win_done:
+				win = pd.read_csv(win_file_path, sep='\t',
+					header=None, index_col=0)
+				if (win.transpose().values == window.values).all():
+					self.log.info("Re-using previous results for window " +
+						f"{window_tag} {window_range}")
+					return(self.__import_window_output(win_path))
 		
-		window.transpose().to_csv(
+		window.to_csv(
 			os.path.join(win_path, "window.tsv"), sep = "\t", index = True)
 
 		self.addFileHandler(os.path.join(win_path, "window.log"))
@@ -442,6 +477,8 @@ class OligoWalker(OligoProbeBuilder):
 			next_window_start = self.window_sets.iloc[self.w+1, :]['start']
 			self.current_oligos = [o for o in self.current_oligos
 				if o['start'].values[0] >= next_window_start]
+
+		return(probe_list)
 
 	def __build_probe_candidates(self, oGroup):
 		# Applies oligo filters to the oligo group,
@@ -489,6 +526,8 @@ class OligoWalker(OligoProbeBuilder):
 			nOligos = oGroup.get_n_focused_oligos()
 			nOligosUsable = oGroup.get_n_focused_oligos(True)
 			if nOligosUsable == nOligos_prev_score_thr:
+				continue
+			if 0 == nOligosUsable:
 				continue
 
 			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
@@ -742,14 +781,13 @@ def assert_inInterv(x, vmin, vmax, label, leftClose = False, rightClose = True):
 
 # RUN ==========================================================================
 
-if not force_out:
+if not reuse:
 	assert not os.path.isfile(out_path)
 	assert not os.path.isdir(out_path)
 else:
 	assert not os.path.isfile(out_path)
-	if os.path.isdir(out_path):
-		shutil.rmtree(out_path)
-os.mkdir(out_path)
+	if not os.path.isdir(out_path):
+		os.mkdir(out_path)
 
 logFormatter = logging.Formatter('%(asctime)s %(levelname)s:\t%(message)s',
 	datefmt='%d/%m/%Y %I:%M:%S')
@@ -769,6 +807,7 @@ logger.log.info(f"This log is saved at '{logPath}'.")
 
 oWalker = OligoWalker(db_path, logger.log)
 oWalker.out_path = out_path
+oWalker.reuse = reuse
 oWalker.start()
 
 logging.shutdown()
