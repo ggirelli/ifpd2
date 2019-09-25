@@ -389,6 +389,7 @@ class OligoWalker(OligoProbeBuilder):
 					if self.w == self.window_sets.shape[0]-1:
 						break
 					self.w += 1
+					self.__preprocess_window()
 				if oligo['end'].values[0] > self.E:	# End reached
 					break
 				oligo['score'] = self.__calc_oligo_score(oligo)
@@ -582,7 +583,7 @@ class OligoWalker(OligoProbeBuilder):
 				self.log.warning(
 					"All oligos included. Score relaxation ineffective.")
 				break
-			nOligos_prev_score_thr = nOligos
+			nOligos_prev_score_thr = nOligosUsable
 
 		return(probe_list)
 
