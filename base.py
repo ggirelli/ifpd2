@@ -149,7 +149,7 @@ class OligoWalker(OligoProbeBuilder):
 	C = "chr18"			# Chromosome
 	S = int(3000000)	# Region start coordinate (included)
 	E = int(4000000)	# Region end coordinate (excluded)
-	X = 10				# Number of probes to design
+	X = 20				# Number of probes to design
 	Ws = None			# Window size (used when X is not provided)
 	Wh = 0.1			# Window shift (as a percentage of the window size)
 
@@ -409,6 +409,8 @@ class OligoWalker(OligoProbeBuilder):
 		self.log.info(f"Built {len(probe_list)} oligo probe candidates")
 		self.log.handlers = self.log.handlers[:-1]
 
+		import sys; sys.exit()
+
 		if self.w+1 < self.window_sets.shape[0]:
 			next_window_start = self.window_sets.iloc[self.w+1, :]['start']
 			self.current_oligos = [o for o in self.current_oligos
@@ -444,7 +446,7 @@ class OligoWalker(OligoProbeBuilder):
 
 		score_thr = 0
 		oGroup.apply_threshold(score_thr)
-		nOligos_prev_score_thr = oGroup.get_n_focused_oligos()
+		nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
 
 		self.log.info(f"Set oligo score threshold at {score_thr:.3f}" +
 			f" ({nOligos_prev_score_thr} oligos usable)...")
@@ -458,20 +460,19 @@ class OligoWalker(OligoProbeBuilder):
 
 			oGroup.apply_threshold(score_thr)
 			nOligos = oGroup.get_n_focused_oligos()
-			if nOligos == nOligos_prev_score_thr:
+			nOligosUsable = oGroup.get_n_focused_oligos(True)
+			if nOligosUsable == nOligos_prev_score_thr:
 				continue
 
-			if nOligos == nOligos_in_focus_window:
-				self.log.warning(
-					"All oligos included. Score relaxation ineffective.")
-				break
-
-			nOligosUsable = oGroup.get_n_focused_oligos(True)
 			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
-				f" ({nOligos} oligos usable)...")
+				f" ({nOligosUsable} oligos usable)...")
 			probe_list = self.get_non_overlapping_probes(
 				oGroup.get_focused_oligos())
 
+			if nOligosUsable == nOligos_in_focus_window:
+				self.log.warning(
+					"All oligos included. Score relaxation ineffective.")
+				break
 			nOligos_prev_score_thr = nOligos
 
 		return(probe_list)
@@ -481,42 +482,70 @@ class OligoGroup(Loggable):
 	interest. The window can be expanded to the closest oligo or to retain at
 	least a given number of oligos."""
 
-	focus_window = None		# Left-close, right-open
-	focused_oligos = None
+	_focus_window = None		# Left-close, right-open
+	_oligos_in_focus_window = None
+	_oligos_passing_score_filter = None
 
 	def __init__(self, oligo_data, logger = logging.getLogger):
 		super(OligoGroup, self).__init__(logger)
-		self.data = pd.concat(oligo_data)
+		self._data = pd.concat(oligo_data)
+		self._oligos_passing_score_filter = self._data['score'].values <= 1
 
+	@property
+	def data(self):
+		return self._data.copy()
+
+	@property
+	def focus_window(self):
+		return self._focus_window
+	
+	@property
+	def oligos_in_focus_window(self):
+		return self._oligos_in_focus_window
+	
+	@property
+	def oligos_passing_score_filter(self):
+		return self._oligos_passing_score_filter
+	
+	@property
+	def usable_oligos(self):
+		return np.logical_and(
+			self.oligos_in_focus_window,
+			self.oligos_passing_score_filter)
+	
 	def get_focused_oligos(self, onlyUsable = False):
 		if onlyUsable:
-			tData = self.data.loc[self.focused_oligos, :]
-			return tData.loc[tData['score'] <= 1]
+			return self._data.loc[self.usable_oligos]
 		else:
-			return self.data.loc[self.focused_oligos, :]
+			return self._data.loc[self.oligos_in_focus_window, :]
 
 	def get_n_focused_oligos(self, onlyUsable = False):
-		if isinstance(self.focused_oligos, type(None)):
+		if isinstance(self.oligos_in_focus_window, type(None)):
 			return 0
 		return self.get_focused_oligos(onlyUsable).shape[0]
 
 	def focus_all(self):
 		# Use all oligos to define a focus region
-		self.set_focus_window(self.data.loc[:,'start'].min(),
-			self.data.loc[:,'start'].max()+1)
+		self.set_focus_window(self._data.loc[:,'start'].min(),
+			self._data.loc[:,'start'].max()+1)
 
 	def reset_focus_window(self):
+		if isinstance(self.focus_window, type(None)):
+			return
 		(start, end) = self.focus_window
-		start_condition = self.data['start'].values >= self.focus_window[0]
-		end_condition = self.data['end'].values < self.focus_window[1]
-		self.focused_oligos = np.logical_and(start_condition, end_condition)
+		start_condition = self._data['start'].values >= self.focus_window[0]
+		end_condition = self._data['end'].values < self.focus_window[1]
+		self._oligos_in_focus_window = np.logical_and(
+			start_condition, end_condition)
 
 	def set_focus_window(self, start, end, verbose = True):
 		# Set a sub-window of interest to focus on
-		self.focus_window = (start, end)
-		start_condition = self.data['start'].values >= self.focus_window[0]
-		end_condition = self.data['end'].values < self.focus_window[1]
-		self.focused_oligos = np.logical_and(start_condition, end_condition)
+		self._focus_window = (start, end)
+		start_condition = self._data['start'].values >= self.focus_window[0]
+		end_condition = self._data['end'].values < self.focus_window[1]
+		self._oligos_in_focus_window = np.logical_and(
+			start_condition, end_condition)
+
 		if verbose:
 			nOligos = self.get_n_focused_oligos()
 			nOligosUsable = self.get_n_focused_oligos(True)
@@ -526,11 +555,14 @@ class OligoGroup(Loggable):
 	def expand_focus_to_n_oligos(self, n, verbose = True):
 		# Expand the sub-window of interest to retrieve at least n oligos
 		assert not isinstance(self.focus_window, type(None))
+
 		if n <= self.get_n_focused_oligos():
 			return
+
 		for i in range(n-self.get_n_focused_oligos()):
 			if not self.expand_focus_to_closest():
 				return
+
 		if verbose:
 			nOligos = self.get_n_focused_oligos()
 			nOligosUsable = self.get_n_focused_oligos(True)
@@ -541,8 +573,8 @@ class OligoGroup(Loggable):
 		# Expand the current focus window of a given step (in nt)
 		assert 0 < step
 
-		if self.focus_window[0] <= self.data['start'].min():
-			if self.focus_window[1] >= self.data['end'].min():
+		if self.focus_window[0] <= self._data['start'].min():
+			if self.focus_window[1] >= self._data['end'].max():
 				self.log.warning("Cannot expand the focus region any further " +
 					"(all oligos already included)")
 				return False
@@ -550,8 +582,8 @@ class OligoGroup(Loggable):
 		new_focus_start, new_focus_end = self.focus_window
 		new_focus_start -= step
 		new_focus_end += step
-		new_focus_start = np.max([new_focus_start, self.data['start'].min()])
-		new_focus_end = np.min([new_focus_end, self.data['end'].max()])
+		new_focus_start = np.max([new_focus_start, self._data['start'].min()])
+		new_focus_end = np.min([new_focus_end, self._data['end'].max()])
 
 		self.set_focus_window(new_focus_start, new_focus_end, verbose)
 		return True
@@ -559,21 +591,21 @@ class OligoGroup(Loggable):
 	def expand_focus_to_closest(self):
 		# Expand the sub-window of interest to add the closest oligo
 		# Return False if not possible (e.g., all oligos already included)
-		if self.get_n_focused_oligos() == self.data.shape[0]:
+		if self.get_n_focused_oligos() == self._data.shape[0]:
 			self.log.warning("Cannot expand the focus region any further " +
 				"(all oligos already included)")
 			return False
 
-		earl = self.data['start'].values < self.focus_window[0]
+		earl = self._data['start'].values < self.focus_window[0]
 		if 0 != earl.sum():
-			max_start = self.data.loc[earl, 'start'].max()
+			max_start = self._data.loc[earl, 'start'].max()
 			d_earl = self.focus_window[0] - max_start
 		else:
 			d_earl = np.inf
 
-		late = self.data['end'].values >= self.focus_window[1]
+		late = self._data['end'].values >= self.focus_window[1]
 		if 0 != late.sum():
-			min_end = self.data.loc[late, 'end'].min()
+			min_end = self._data.loc[late, 'end'].min()
 			d_late = min_end - self.focus_window[1]
 		else:
 			d_late = np.inf
@@ -597,8 +629,7 @@ class OligoGroup(Loggable):
 		# Unfocuses oligos with score higher than the threshold
 		assert threshold <= 1 and threshold >= 0
 		self.reset_focus_window()
-		self.focused_oligos = np.logical_and(self.focused_oligos,
-			self.data['score'].values <= threshold)
+		self._oligos_passing_score_filter = self._data['score'] <= threshold
 
 class OligoProbe(object):
 	"""docstring for OligoProbe"""
