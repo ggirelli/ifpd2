@@ -380,7 +380,8 @@ class OligoWalker(OligoProbeBuilder):
 			oligo = pd.DataFrame(oligo).transpose()
 			oligo.columns = dtype
 
-			start_of_current_window = self.window_sets['start'].values[self.w]
+			start_of_current_window = self.window_sets.iloc[
+				self.w, 'start'].values
 			if oligo['start'].values[0] >= start_of_current_window:
 				end_of_current_window = self.window_sets['end'].values[self.w]
 				if oligo['start'].values[0] >= end_of_current_window:
@@ -388,8 +389,19 @@ class OligoWalker(OligoProbeBuilder):
 					self.__select_from_window()
 					if self.w == self.window_sets.shape[0]-1:
 						break
+
 					self.w += 1
 					self.__preprocess_window()
+					nWindows = self.window_sets.shape[0]
+					while self.__window_processed() and self.w < nWindows:
+						self.w += 1
+						self.__preprocess_window()
+
+					start_of_current_window = self.window_sets.iloc[
+						self.w, 'start'].values
+					self.current_oligos = [o for o in self.current_oligos
+						if o['start'].values[0] >= window_start]
+
 				if oligo['end'].values[0] > self.E:	# End reached
 					break
 				oligo['score'] = self.__calc_oligo_score(oligo)
@@ -507,17 +519,10 @@ class OligoWalker(OligoProbeBuilder):
 		
 		Path(os.path.join(win_path, ".done")).touch()
 
-		if self.w+1 < self.window_sets.shape[0]:
-			next_window_start = self.window_sets.iloc[self.w+1, :]['start']
-			self.current_oligos = [o for o in self.current_oligos
-				if o['start'].values[0] >= next_window_start]
-
 		if not int(window['s']) in self.probe_candidates.keys():
 			self.probe_candidates[int(window['s'])] = {}
 
-		self.probe_candidates[
-			int(window['s'])][int(window['w'])
-			] = self.__import_window_output(win_path)
+		self.probe_candidates[int(window['s'])][int(window['w'])] = probe_list
 		return
 
 	def __build_probe_candidates(self, oGroup):
@@ -551,13 +556,15 @@ class OligoWalker(OligoProbeBuilder):
 		score_thr = 0
 		oGroup.apply_threshold(score_thr)
 		nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
-		while 0 == nOligos_prev_score_thr and score_thr <= 1:
+		self.log.info(f"Set oligo score threshold at {score_thr:.3f}" +
+			f" ({nOligos_prev_score_thr} oligos usable)...")
+
+		while 0 == nOligos_prev_score_thr and score_thr <= 1-self.Ot:
 			score_thr += self.Ot
 			oGroup.apply_threshold(score_thr)
 			nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
-
-		self.log.info(f"Set oligo score threshold at {score_thr:.3f}" +
-			f" ({nOligos_prev_score_thr} oligos usable)...")
+			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
+				f" ({nOligos_prev_score_thr} oligos usable)...")
 
 		probe_list = self.get_non_overlapping_probes(
 			oGroup.get_focused_oligos(True))
@@ -599,6 +606,7 @@ class OligoGroup(Loggable):
 	def __init__(self, oligo_data, logger = logging.getLogger):
 		super(OligoGroup, self).__init__(logger)
 		self._data = pd.concat(oligo_data, ignore_index = True)
+		self._data = self._data.loc[self._data['score'] <= 1, :]
 		self._oligos_passing_score_filter = self._data['score'].values <= 1
 
 	@property
@@ -653,10 +661,7 @@ class OligoGroup(Loggable):
 	def set_focus_window(self, start, end, verbose = True):
 		# Set a sub-window of interest to focus on
 		self._focus_window = (start, end)
-		start_condition = self._data['start'].values >= self.focus_window[0]
-		end_condition = self._data['end'].values < self.focus_window[1]
-		self._oligos_in_focus_window = np.logical_and(
-			start_condition, end_condition)
+		self.reset_focus_window()
 
 		if verbose:
 			nOligos = self.get_n_focused_oligos()
@@ -667,14 +672,14 @@ class OligoGroup(Loggable):
 	def expand_focus_to_n_oligos(self, n, verbose = True):
 		# Expand the sub-window of interest to retrieve at least n oligos
 		assert not isinstance(self.focus_window, type(None))
-
+		
 		if n <= self.get_n_focused_oligos():
 			return
-
+		
 		for i in range(n-self.get_n_focused_oligos()):
 			if not self.expand_focus_to_closest():
 				return
-
+		
 		if verbose:
 			nOligos = self.get_n_focused_oligos()
 			nOligosUsable = self.get_n_focused_oligos(True)
