@@ -395,6 +395,8 @@ class OligoWalker(OligoProbeBuilder):
 		win_path = os.path.join(set_path,f"window_{int(window['w'])}")
 		os.mkdir(win_path)
 
+		self.addFileHandler(os.path.join(win_path, "window.log"))
+
 		if len(self.current_oligos) >= self.N:
 			oGroup = OligoGroup(self.current_oligos, self.log)
 			self.log.info(f"Retrieved {oGroup.data.shape[0]} oligos for" +
@@ -405,8 +407,7 @@ class OligoWalker(OligoProbeBuilder):
 				f" oligos {len(self.current_oligos)}/{self.N}, skipped.")
 		
 		self.log.info(f"Built {len(probe_list)} oligo probe candidates")
-		print(probe_list)
-		import sys; sys.exit()
+		self.log.handlers = self.log.handlers[:-1]
 
 		if self.w+1 < self.window_sets.shape[0]:
 			next_window_start = self.window_sets.iloc[self.w+1, :]['start']
