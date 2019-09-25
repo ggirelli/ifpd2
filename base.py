@@ -20,6 +20,7 @@ import logging
 import numpy as np
 import os
 import pandas as pd
+from pathlib import Path
 import shutil
 from tqdm import tqdm
 
@@ -398,8 +399,13 @@ class OligoWalker(OligoProbeBuilder):
 		set_path = os.path.join(self.out_path,f"set_{int(window['s'])}")
 		if not os.path.isdir(set_path):
 			os.mkdir(set_path)
+			self.window_sets.loc[self.window_sets['s'] == window['s'],:].to_csv(
+				os.path.join(set_path, "windows.tsv"), "\t")
 		win_path = os.path.join(set_path,f"window_{int(window['w'])}")
 		os.mkdir(win_path)
+		
+		window.transpose().to_csv(
+			os.path.join(win_path, "window.tsv"), sep = "\t", index = True)
 
 		self.addFileHandler(os.path.join(win_path, "window.log"))
 
@@ -429,8 +435,8 @@ class OligoWalker(OligoProbeBuilder):
 		probe_paths = pd.DataFrame(probe_paths)
 		probe_paths.columns = ["cs_oligos"]
 		probe_paths.to_csv(os.path.join(win_path, "probe_paths.tsv"), "\t")
-
-		import sys; sys.exit()
+		
+		Path(os.path.join(win_path, ".done")).touch()
 
 		if self.w+1 < self.window_sets.shape[0]:
 			next_window_start = self.window_sets.iloc[self.w+1, :]['start']
