@@ -98,13 +98,19 @@ class OligoProbeBuilder(Loggable):
 
 			path = [i]
 			k = i
-			j = A[k,(k+1):].argmax()+k+1
-			path.append(j)
+			if 1 in A[k,(k+1):]:
+				j = A[k,(k+1):].argmax()+k+1
+				path.append(j)
+			else:
+				continue
 
 			while (j+1) < A.shape[0]:
 				k = j
-				j = A[k,(k+1):].argmax()+k+1
-				path.append(j)
+				if 1 in A[k,(k+1):]:
+					j = A[k,(k+1):].argmax()+k+1
+					path.append(j)
+				else:
+					break
 
 			if self.N > len(path):
 				continue
@@ -409,6 +415,14 @@ class OligoWalker(OligoProbeBuilder):
 		self.log.info(f"Built {len(probe_list)} oligo probe candidates")
 		self.log.handlers = self.log.handlers[:-1]
 
+		probe_df = pd.concat([op.featDF for op in probe_list],
+			ignore_index = True)
+		probe_df.to_csv(os.path.join(win_path, "probe_feat.tsv"), "\t")
+
+		for pi in range(len(probe_list)):
+			probe_list[pi].data.to_csv(os.path.join(win_path,
+				f"probe_set.{pi}.tsv"), "\t")
+
 		import sys; sys.exit()
 
 		if self.w+1 < self.window_sets.shape[0]:
@@ -452,7 +466,7 @@ class OligoWalker(OligoProbeBuilder):
 			f" ({nOligos_prev_score_thr} oligos usable)...")
 
 		probe_list = self.get_non_overlapping_probes(
-			oGroup.get_focused_oligos())
+			oGroup.get_focused_oligos(True))
 		while 0 == len(probe_list):
 			score_thr += self.Ot
 			if score_thr > 1:
@@ -467,7 +481,7 @@ class OligoWalker(OligoProbeBuilder):
 			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
 				f" ({nOligosUsable} oligos usable)...")
 			probe_list = self.get_non_overlapping_probes(
-				oGroup.get_focused_oligos())
+				oGroup.get_focused_oligos(True))
 
 			if nOligosUsable == nOligos_in_focus_window:
 				self.log.warning(
@@ -488,7 +502,7 @@ class OligoGroup(Loggable):
 
 	def __init__(self, oligo_data, logger = logging.getLogger):
 		super(OligoGroup, self).__init__(logger)
-		self._data = pd.concat(oligo_data)
+		self._data = pd.concat(oligo_data, ignore_index = True)
 		self._oligos_passing_score_filter = self._data['score'].values <= 1
 
 	@property
@@ -645,15 +659,28 @@ class OligoProbe(object):
 	@data.setter
 	def data(self, oligo_data):
 		assert isinstance(oligo_data, pd.DataFrame)
+		required_columns = ["start", "end", "Tm"]
+		assert all([col in oligo_data.columns for col in required_columns])
 		self._data = oligo_data
 		self._range = (self._data['start'].min(), self._data['end'].max())
 		self._size = self._range[1] - self._range[0]
-		self._spread = np.nan
+		oDists = self._data['start'].values[1:] - self._data['end'].values[:-1]
+		self._spread = np.std(oDists)
+		self._d_range = (oDists.min(), oDists.max())
+		self._tm_range = self._data['Tm'].max() - self._data['Tm'].min()
 
 	@property
 	def range(self):
 		return self._range
+
+	@property
+	def tm_range(self):
+		return self._tm_range
 	
+	@property
+	def d_range(self):
+		return self._d_range
+
 	@property
 	def spread(self):
 		return self._spread
@@ -661,6 +688,15 @@ class OligoProbe(object):
 	@property
 	def size(self):
 		return self._size
+
+	@property
+	def featDF(self):
+		df = pd.DataFrame([self.range[0], self.range[1], self._data.shape[0],
+			self.size, self.spread, self.d_range[0], self.d_range[1],
+			self.tm_range]).transpose()
+		df.columns = ["start", "end", "size", "nOligos",
+			"spread", "d_min", "d_max", "tm_range"]
+		return df
 
 	def __repr__(self):
 		rep  = f"<OligoProbe[{self.range[0]}:{self.range[1]}"
