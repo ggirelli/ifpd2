@@ -46,7 +46,7 @@ class OligoProbeBuilder(object):
 		assert_type(self.Ps, int, "Ps")
 		assert self.Ps > 1
 
-	def get_non_overlapping_sets(self, oData):
+	def get_non_overlapping_probes(self, oData):
 		# Gets all sets of N consecutive non-overlapping oligos with minimum
 		# distance equal to D and melting temperature range of +-Tr
 		assert_type(oData, pd.DataFrame, "oData")
@@ -106,12 +106,12 @@ class OligoProbeBuilder(object):
 					path_set.add(tuple(subpath))
 					path_start_set.add(subpath[0])
 
-		oligo_set_list = []
+		probe_list = []
 		if 0 != len(path_set):
 			for path in list(path_set):
-				oligo_set_list.append(oData.iloc[list(path), :])
+				probe_list.append(OligoProbe(oData.iloc[list(path), :]))
 
-		return(oligo_set_list)
+		return(probe_list)
 
 class OligoWalker(OligoProbeBuilder):
 	"""OligoWalker walks through the oligos stored in an ifpd2 database,
@@ -150,7 +150,7 @@ class OligoWalker(OligoProbeBuilder):
 		self._assert()
 		self.__mk_windows()
 		self.__print_prologue()
-		self.__walk()
+		self.__walk_db()
 		pass
 
 	def _assert(self):
@@ -225,6 +225,8 @@ class OligoWalker(OligoProbeBuilder):
 		assert 0 < self.Ot and 1 >= self.Ot
 
 	def __mk_windows(self):
+		# Build windows and central focus regions (CFR)
+		
 		if isinstance(self.X, int):
 			self.Ws = np.floor((self.E-self.S)/(self.X+1)).astype("i")
 
@@ -325,7 +327,7 @@ class OligoWalker(OligoProbeBuilder):
 		norm_ss_dG = self.__norm_secondary_structure_dG(oligo)
 		return(norm_nOT * norm_ss_dG)
 
-	def __walk(self):
+	def __walk_db(self):
 		dtype = ['name', 'chrom', 'start', 'end', 'tm_dG',
 			'dH', 'dS', 'Tm', 'seq', 'nOT', 'k', 'ss_dG']
 
@@ -351,7 +353,7 @@ class OligoWalker(OligoProbeBuilder):
 				end_of_current_window = self.window_sets['end'].values[self.w]
 				if oligo['start'].values[0] >= end_of_current_window:
 					pbDBH.clear()
-					self.__select_from()
+					self.__select_from_window()
 					if self.w == self.window_sets.shape[0]-1:
 						break
 					self.w += 1
@@ -365,26 +367,30 @@ class OligoWalker(OligoProbeBuilder):
 
 		DBH.close()
 
-	def __select_from(self):
-		current_window = self.window_sets.iloc[self.w,:]
-		window_tag = f"{int(current_window['s'])}.{int(current_window['w'])}"
-		window_range = f"[{int(current_window['start'])}:{int(current_window['end'])}]"
+	def __select_from_window(self):
+		window = self.window_sets.iloc[self.w,:]
+		window_tag = f"{int(window['s'])}.{int(window['w'])}"
+		window_range = f"[{int(window['start'])}:{int(window['end'])}]"
 
-		set_path = os.path.join(self.out_path,f"set_{int(current_window['s'])}")
+		set_path = os.path.join(self.out_path,f"set_{int(window['s'])}")
 		if not os.path.isdir(set_path):
 			os.mkdir(set_path)
-		win_path = os.path.join(set_path,f"window_{int(current_window['w'])}")
+		win_path = os.path.join(set_path,f"window_{int(window['w'])}")
 		os.mkdir(win_path)
 
 		if len(self.current_oligos) >= self.N:
 			oGroup = OligoGroup(self.current_oligos)
 			print(f"Retrieved {oGroup.data.shape[0]} oligos for" +
 				f" window {window_tag} {window_range}")
-			oGroup = self.__filter_oligo_group(oGroup)
+			probe_list = self.__build_probe_candidates(oGroup)
 		else:
 			print(f"Window {window_tag} does not have enough oligos " +
 				f"{len(self.current_oligos)}/{self.N}, skipped.")
 		
+		print(len(probe_list))
+		print(probe_list)
+		import sys; sys.exit()
+
 		if self.w+1 < self.window_sets.shape[0]:
 			next_window_start = self.window_sets.iloc[self.w+1, :]['start']
 			self.current_oligos = [o for o in self.current_oligos
@@ -392,9 +398,9 @@ class OligoWalker(OligoProbeBuilder):
 
 		print("")
 
-	def __filter_oligo_group(self, oGroup):
-		# Applies oligo filters to the oligo group
-		# and expands the focus group if needed
+	def __build_probe_candidates(self, oGroup):
+		# Applies oligo filters to the oligo group,
+		# expands the focus group if needed, and build probe candidates
 		
 		if np.isnan(self.window_sets.loc[self.w, 'cfr_start']):
 			oGroup.focus_all()
@@ -403,20 +409,21 @@ class OligoWalker(OligoProbeBuilder):
 				self.window_sets.loc[self.w, 'cfr_end'])
 			oGroup.expand_focus_to_n_oligos(self.N)
 
-		oligo_set_list = self.__scan_score_threshold(oGroup)
+		probe_list = self.__explore_filter(oGroup)
 		if not np.isnan(self.window_sets.loc[self.w, 'cfr_start']):
-			while 0 == len(oligo_set_list):
+			while 0 == len(probe_list):
 				if not oGroup.expand_focus_by_step(self.Rt):
 					break
-				oligo_set_list = self.__scan_score_threshold(oGroup)
+				probe_list = self.__explore_filter(oGroup)
 		else:
 			print("No CFR expansion, whole window already included.")
 		
-		print(len(oligo_set_list))
-		print([x.shape for x in oligo_set_list])
-		import sys; sys.exit()
+		return(probe_list)
 
-	def __scan_score_threshold(self, oGroup):
+	def __explore_filter(self, oGroup):
+		# Explores the 0-to-1 score threshold range and stops as soon as one
+		# probe candidate passes all user-defined thresholds
+		
 		nOligos_in_focus_window = oGroup.get_n_focused_oligos(True)
 
 		score_thr = 0
@@ -426,9 +433,9 @@ class OligoWalker(OligoProbeBuilder):
 		print("Set oligo score threshold at %.3f (%d oligos usable)..." % (
 			score_thr, oGroup.get_n_focused_oligos()))
 
-		oligo_set_list = self.get_non_overlapping_sets(
+		probe_list = self.get_non_overlapping_probes(
 			oGroup.get_focused_oligos())
-		while 0 == len(oligo_set_list):
+		while 0 == len(probe_list):
 			score_thr += self.Ot
 			if score_thr > 1:
 				break
@@ -445,12 +452,12 @@ class OligoWalker(OligoProbeBuilder):
 			nOligosUsable = oGroup.get_n_focused_oligos(True)
 			print(f"Relaxed oligo score threshold to {score_thr:.3f}"+
 				f" ({nOligos} oligos usable)...")
-			oligo_set_list = self.get_non_overlapping_sets(
+			probe_list = self.get_non_overlapping_probes(
 				oGroup.get_focused_oligos())
 
 			nOligos_prev_score_thr = nOligos
 
-		return(oligo_set_list)
+		return(probe_list)
 
 class OligoGroup(object):
 	"""Allows to select oligos from a group based on a "focus" window of
@@ -575,6 +582,42 @@ class OligoGroup(object):
 		self.reset_focus_window()
 		self.focused_oligos = np.logical_and(self.focused_oligos,
 			self.data['score'].values <= threshold)
+
+class OligoProbe(object):
+	"""docstring for OligoProbe"""
+
+	def __init__(self, oligo_data):
+		super(OligoProbe, self).__init__()
+		self.data = oligo_data
+
+	@property
+	def data(self):
+		return self._data.copy()
+	
+	@data.setter
+	def data(self, oligo_data):
+		assert isinstance(oligo_data, pd.DataFrame)
+		self._data = oligo_data
+		self._range = (self._data['start'].min(), self._data['end'].max())
+		self._size = self._range[1] - self._range[0]
+		self._spread = np.nan
+
+	@property
+	def range(self):
+		return self._range
+	
+	@property
+	def spread(self):
+		return self._spread
+	
+	@property
+	def size(self):
+		return self._size
+
+	def __repr__(self):
+		rep  = f"<OligoProbe[{self.range[0]}:{self.range[1]}"
+		rep += f":{self.size}:{self.spread}]>"
+		return rep
 
 # FUNCTIONS ====================================================================
 
