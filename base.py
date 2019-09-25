@@ -8,19 +8,44 @@
 #	
 # ==============================================================================
 
+# PARAMETERS ===================================================================
+
+out_path = "/mnt/data/COOLFISH/ifpd2_out/test"
+db_path = "/mnt/data/COOLFISH/mm10_chr18_selected_regions.tsv"
+force_out = True
+
 # DEPENDENCIES =================================================================
 
+import logging
 import numpy as np
 import os
 import pandas as pd
 import shutil
 from tqdm import tqdm
 
-# PARAMETERS ===================================================================
-
 # CLASSES ======================================================================
 
-class OligoProbeBuilder(object):
+class Loggable(object):
+	"""docstring for Loggable"""
+	def __init__(self, logger = logging.getLogger(),
+		formatter = logging.Formatter(
+			'%(asctime)s %(levelname)s:\t%(message)s',
+			datefmt = '%d/%m/%Y %I:%M:%S')):
+		super(Loggable, self).__init__()
+		self._logger = logger
+		self._formatter = formatter
+
+	@property
+	def log(self):
+		return self._logger
+
+	def addFileHandler(self, path, mode="a+", level=logging.DEBUG):
+		fileHandler = logging.FileHandler(path, "a+")
+		fileHandler.setFormatter(self._formatter)
+		fileHandler.setLevel(level)
+		self.log.addHandler(fileHandler)
+
+class OligoProbeBuilder(Loggable):
 	"""OligoProbeBuilder contains methods to select non-overlapping sets of
 	oligos (i.e., probes) from an oligo DataFrame in input."""
 
@@ -29,8 +54,8 @@ class OligoProbeBuilder(object):
 	Tr = 10.0			# Melting temperature range half-width
 	Ps = int(10000)		# Probe size threshold, in nt (Ps > 1)
 
-	def __init__(self):
-		super(OligoProbeBuilder, self).__init__()
+	def __init__(self, logger = logging.getLogger):
+		super(OligoProbeBuilder, self).__init__(logger)
 
 	def _assert(self):
 
@@ -120,7 +145,6 @@ class OligoWalker(OligoProbeBuilder):
 
 	db_path = None
 	out_path = "."
-	force_out = False
 
 	C = "chr18"			# Chromosome
 	S = int(3000000)	# Region start coordinate (included)
@@ -142,8 +166,8 @@ class OligoWalker(OligoProbeBuilder):
 						#  (range)
 	Ot = .1				# Step for oligo score relaxation
 
-	def __init__(self, db_path):
-		super(OligoWalker, self).__init__()
+	def __init__(self, db_path, logger = logging.getLogger):
+		super(OligoWalker, self).__init__(logger)
 		self.db_path = db_path
 
 	def start(self):
@@ -157,14 +181,7 @@ class OligoWalker(OligoProbeBuilder):
 		super(OligoWalker, self)._assert()
 
 		assert os.path.isfile(self.db_path)
-		if not self.force_out:
-			assert not os.path.isfile(self.out_path)
-			assert not os.path.isdir(self.out_path)
-		else:
-			assert not os.path.isfile(self.out_path)
-			if os.path.isdir(self.out_path):
-				shutil.rmtree(self.out_path)
-		os.mkdir(self.out_path)
+		assert os.path.isdir(self.out_path)
 
 		assert_type(self.C, str, "C")
 		assert_type(self.S, int, "S")
@@ -274,7 +291,7 @@ class OligoWalker(OligoProbeBuilder):
 		nProbes = self.window_sets['w'].max().astype('i')+1
 		nSets = self.window_sets["s"].max().astype('i')+1
 
-		s  = f"Database: '{self.db_path}'\n"
+		s  = f"\nDatabase: '{self.db_path}'\n"
 		s += f"Region of interest: {self.C}:{self.S}-{self.E}\n"
 		s += f"Aim to build {nProbes} probes, each with {self.N} oligos.\n\n"
 
@@ -298,7 +315,7 @@ class OligoWalker(OligoProbeBuilder):
 		s += f" set at {self.D} nt.\n"
 		s += f"Probe size threshold set at {self.Ps} nt.\n"
 
-		print(s)	
+		self.log.info(s)
 
 	def __norm_value_in_range(self, v, r):
 		if 0 == r[1]: return np.nan
@@ -363,7 +380,7 @@ class OligoWalker(OligoProbeBuilder):
 				if not np.isnan(oligo['score'].values[0]):
 					self.current_oligos.append(oligo)
 				self.r += 1
-		print(f"Walked through {self.r} records.")
+		self.log.info(f"Walked through {self.r} records.")
 
 		DBH.close()
 
@@ -379,15 +396,15 @@ class OligoWalker(OligoProbeBuilder):
 		os.mkdir(win_path)
 
 		if len(self.current_oligos) >= self.N:
-			oGroup = OligoGroup(self.current_oligos)
-			print(f"Retrieved {oGroup.data.shape[0]} oligos for" +
+			oGroup = OligoGroup(self.current_oligos, self.log)
+			self.log.info(f"Retrieved {oGroup.data.shape[0]} oligos for" +
 				f" window {window_tag} {window_range}")
 			probe_list = self.__build_probe_candidates(oGroup)
 		else:
-			print(f"Window {window_tag} does not have enough oligos " +
-				f"{len(self.current_oligos)}/{self.N}, skipped.")
+			self.log.warning(f"Window {window_tag} does not have enough" +
+				f" oligos {len(self.current_oligos)}/{self.N}, skipped.")
 		
-		print(len(probe_list))
+		self.log.info(f"Built {len(probe_list)} oligo probe candidates")
 		print(probe_list)
 		import sys; sys.exit()
 
@@ -395,8 +412,6 @@ class OligoWalker(OligoProbeBuilder):
 			next_window_start = self.window_sets.iloc[self.w+1, :]['start']
 			self.current_oligos = [o for o in self.current_oligos
 				if o['start'].values[0] >= next_window_start]
-
-		print("")
 
 	def __build_probe_candidates(self, oGroup):
 		# Applies oligo filters to the oligo group,
@@ -416,7 +431,7 @@ class OligoWalker(OligoProbeBuilder):
 					break
 				probe_list = self.__explore_filter(oGroup)
 		else:
-			print("No CFR expansion, whole window already included.")
+			self.log.warning("No CFR expansion, whole window already included.")
 		
 		return(probe_list)
 
@@ -430,8 +445,8 @@ class OligoWalker(OligoProbeBuilder):
 		oGroup.apply_threshold(score_thr)
 		nOligos_prev_score_thr = oGroup.get_n_focused_oligos()
 
-		print("Set oligo score threshold at %.3f (%d oligos usable)..." % (
-			score_thr, oGroup.get_n_focused_oligos()))
+		self.log.info(f"Set oligo score threshold at {score_thr:.3f}" +
+			f" ({nOligos_prev_score_thr} oligos usable)...")
 
 		probe_list = self.get_non_overlapping_probes(
 			oGroup.get_focused_oligos())
@@ -446,11 +461,12 @@ class OligoWalker(OligoProbeBuilder):
 				continue
 
 			if nOligos == nOligos_in_focus_window:
-				print("All oligos included. Score relaxation ineffective.")
+				self.log.warning(
+					"All oligos included. Score relaxation ineffective.")
 				break
 
 			nOligosUsable = oGroup.get_n_focused_oligos(True)
-			print(f"Relaxed oligo score threshold to {score_thr:.3f}"+
+			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
 				f" ({nOligos} oligos usable)...")
 			probe_list = self.get_non_overlapping_probes(
 				oGroup.get_focused_oligos())
@@ -459,7 +475,7 @@ class OligoWalker(OligoProbeBuilder):
 
 		return(probe_list)
 
-class OligoGroup(object):
+class OligoGroup(Loggable):
 	"""Allows to select oligos from a group based on a "focus" window of
 	interest. The window can be expanded to the closest oligo or to retain at
 	least a given number of oligos."""
@@ -467,8 +483,8 @@ class OligoGroup(object):
 	focus_window = None		# Left-close, right-open
 	focused_oligos = None
 
-	def __init__(self, oligo_data):
-		super(OligoGroup, self).__init__()
+	def __init__(self, oligo_data, logger = logging.getLogger):
+		super(OligoGroup, self).__init__(logger)
 		self.data = pd.concat(oligo_data)
 
 	def get_focused_oligos(self, onlyUsable = False):
@@ -503,7 +519,7 @@ class OligoGroup(object):
 		if verbose:
 			nOligos = self.get_n_focused_oligos()
 			nOligosUsable = self.get_n_focused_oligos(True)
-			print(f"Set focus region to {self.focus_window}" +
+			self.log.info(f"Set focus region to {self.focus_window}" +
 				f" ({nOligos} oligos, {nOligosUsable} usable)")
 
 	def expand_focus_to_n_oligos(self, n, verbose = True):
@@ -517,7 +533,7 @@ class OligoGroup(object):
 		if verbose:
 			nOligos = self.get_n_focused_oligos()
 			nOligosUsable = self.get_n_focused_oligos(True)
-			print(f"Expanded focus region to {self.focus_window}" +
+			self.log.info(f"Expanded focus region to {self.focus_window}" +
 				f" ({nOligos} oligos, {nOligosUsable} usable)")
 
 	def expand_focus_by_step(self, step, verbose = True):
@@ -526,7 +542,7 @@ class OligoGroup(object):
 
 		if self.focus_window[0] <= self.data['start'].min():
 			if self.focus_window[1] >= self.data['end'].min():
-				print("Cannot expand the focus region any further " +
+				self.log.warning("Cannot expand the focus region any further " +
 					"(all oligos already included)")
 				return False
 
@@ -543,7 +559,7 @@ class OligoGroup(object):
 		# Expand the sub-window of interest to add the closest oligo
 		# Return False if not possible (e.g., all oligos already included)
 		if self.get_n_focused_oligos() == self.data.shape[0]:
-			print("Cannot expand the focus region any further " +
+			self.log.warning("Cannot expand the focus region any further " +
 				"(all oligos already included)")
 			return False
 
@@ -645,10 +661,36 @@ def assert_inInterv(x, vmin, vmax, label, leftClose = False, rightClose = True):
 
 # RUN ==========================================================================
 
-oWalker = OligoWalker("/mnt/data/COOLFISH/mm10_chr18_selected_regions.tsv")
-oWalker.out_path = "/mnt/data/COOLFISH/ifpd2_out/test"
-oWalker.force_out = True
+if not force_out:
+	assert not os.path.isfile(out_path)
+	assert not os.path.isdir(out_path)
+else:
+	assert not os.path.isfile(out_path)
+	if os.path.isdir(out_path):
+		shutil.rmtree(out_path)
+os.mkdir(out_path)
+
+logFormatter = logging.Formatter('%(asctime)s %(levelname)s:\t%(message)s',
+	datefmt='%d/%m/%Y %I:%M:%S')
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+consoleHandler = logging.StreamHandler()
+consoleHandler.setFormatter(logFormatter)
+consoleHandler.setLevel(logging.DEBUG)
+logger.addHandler(consoleHandler)
+logger = Loggable(logger)
+
+logPath = "{0}/{1}.log".format(out_path, "test")
+logger.addFileHandler(logPath)
+
+logger.log.info(f"This log is saved at '{logPath}'.")
+
+oWalker = OligoWalker(db_path, logger.log)
+oWalker.out_path = out_path
 oWalker.start()
+
+logging.shutdown()
 
 # END ==========================================================================
 
