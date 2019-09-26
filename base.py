@@ -207,10 +207,10 @@ class OligoProbeBuilder(Loggable):
 class GenomicWindowSet(object):
 	"""Genomic window manager."""
 
-	window_sets = None
+	_window_sets = None
 
 	S = int(3000000)	# Region start coordinate (included)
-	E = int(3500000)	# Region end coordinate (excluded)
+	E = int(3100000)	# Region end coordinate (excluded)
 
 	X = 2				# Number of probes to design
 	Ws = None			# Window size (used when X is not provided)
@@ -274,24 +274,31 @@ class GenomicWindowSet(object):
 			central_regions = np.vstack([nans, nans]).transpose()
 			self.__focus_on_center = False
 
-		self.window_sets = []
+		window_sets = []
 		for i in range(len(np.arange(0, 1, self.Wh))):
 			winID = np.array(range(nWindows)).reshape((nWindows, 1))
 			setID = np.repeat(i, nWindows).reshape((nWindows, 1))
-			self.window_sets.append(np.hstack([
+			window_sets.append(np.hstack([
 				window_borders+i*self.Wh*self.Ws,
 				window_mids+i*self.Wh*self.Ws,
 				central_regions+i*self.Wh*self.Ws,
 				winID, setID])[ :, (0, 2, 1, 3, 4, 5, 6)])
 
-		self.window_sets = pd.DataFrame(np.vstack(self.window_sets))
-		self.window_sets.columns = ["start", "mid", "end",
-			"cfr_start", "cfr_end", "w", "s"]
-		self.window_sets = self.window_sets.sort_values("end")
-		self.window_sets.index = range(self.window_sets.shape[0])
-
 		self._w = 0 # Window ID
 		self._reached_last_window = False
+		self.window_sets = window_sets
+
+	@property
+	def window_sets(self):
+		return self._window_sets
+	
+	@window_sets.setter
+	def window_sets(self, window_sets):
+		self._window_sets = pd.DataFrame(np.vstack(window_sets))
+		self._window_sets.columns = [
+			"start", "mid", "end", "cfr_start", "cfr_end", "w", "s"]
+		self._window_sets.sort_values("end", inplace = True)
+		self._window_sets.reset_index(inplace = True)
 
 	@property
 	def wid(self):
@@ -377,6 +384,8 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		else:
 			assert_inInterv(self.Rs, 0, 1, "Rs")
 		
+		assert (self.k+self.D)*self.N <= self.Ps
+
 		assert_multiTypes(self.Rt, [int, float], "Rt")
 		if isinstance(self.Rt, int):
 			assert self.Rt > 1
@@ -638,9 +647,14 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		return(probe_list)
 
 	def __explore_filter(self, oGroup):
-		# Explores the 0-to-1 score threshold range and stops as soon as one
+		# Explores the 0-to-max_score score threshold range and stops as soon as one
 		# probe candidate passes all user-defined thresholds
 		
+		if oGroup.focus_window_size < self.Ps:
+			max_score = 0
+		else:
+			max_score = 1
+
 		nOligos_in_focus_window = oGroup.get_n_focused_oligos(True)
 
 		score_thr = 0
@@ -649,7 +663,10 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		self.log.info(f"Set oligo score threshold at {score_thr:.3f}" +
 			f" ({nOligos_prev_score_thr} oligos usable)...")
 
-		while 0 == nOligos_prev_score_thr and score_thr <= 1-self.Ot:
+		if 0 == max_score and 0 == nOligos_prev_score_thr:
+			return([])
+
+		while 0 == nOligos_prev_score_thr and score_thr <= max_score-self.Ot:
 			score_thr += self.Ot
 			oGroup.apply_threshold(score_thr)
 			nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
@@ -660,7 +677,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			oGroup.get_focused_oligos(True))
 		while 0 == len(probe_list):
 			score_thr += self.Ot
-			if score_thr > 1:
+			if score_thr > max_score:
 				break
 
 			oGroup.apply_threshold(score_thr)
@@ -711,7 +728,18 @@ class OligoGroup(Loggable):
 	@property
 	def focus_window(self):
 		return self._focus_window
+
+	@focus_window.setter
+	def focus_window(self, focus_window):
+		assert_type(focus_window, tuple, "focus window")
+		assert 2 == len(focus_window)
+		assert focus_window[1] > focus_window[0]
+		self._focus_window = focus_window
 	
+	@property
+	def focus_window_size(self):
+		return self.focus_window[1] - self.focus_window[0]
+
 	@property
 	def oligos_in_focus_window(self):
 		return self._oligos_in_focus_window
@@ -755,7 +783,7 @@ class OligoGroup(Loggable):
 
 	def set_focus_window(self, start, end, verbose = True):
 		# Set a sub-window of interest to focus on
-		self._focus_window = (start, end)
+		self.focus_window = (start, end)
 		self.reset_focus_window()
 
 		if verbose:
@@ -865,6 +893,7 @@ class OligoProbe(object):
 		oDists = self._data['start'].values[1:] - self._data['end'].values[:-1]
 		self._spread = np.std(oDists)
 		self._d_range = (oDists.min(), oDists.max())
+		self._d_mean = oDists.mean()
 		self._tm_range = self._data['Tm'].max() - self._data['Tm'].min()
 
 	@property
@@ -879,6 +908,10 @@ class OligoProbe(object):
 	def d_range(self):
 		return self._d_range
 
+@property
+	def d_mean(self):
+		return self._d_mean
+
 	@property
 	def spread(self):
 		return self._spread
@@ -890,10 +923,11 @@ class OligoProbe(object):
 	@property
 	def featDF(self):
 		df = pd.DataFrame([self.range[0], self.range[1], self._data.shape[0],
-			self.size, self.spread, self.d_range[0], self.d_range[1],
+			self.size, self.spread,
+			self.d_range[0], self.d_range[1], self.d_mean,
 			self.tm_range]).transpose()
 		df.columns = ["start", "end", "nOligos", "size",
-			"spread", "d_min", "d_max", "tm_range"]
+			"spread", "d_min", "d_max", "d_mean", "tm_range"]
 		return df
 
 	def __repr__(self):
