@@ -111,6 +111,7 @@ class OligoProbeBuilder(Loggable):
 	D = int(2)			# Minimum distance between consecutive oligos
 	Tr = 10.0			# Melting temperature range half-width
 	Ps = int(10000)		# Probe size threshold, in nt (Ps > 1)
+	Ph = .1				# Maximum hole size in probe as fraction of probe size
 
 	def __init__(self, logger = logging.getLogger):
 		super(OligoProbeBuilder, self).__init__(logger)
@@ -128,6 +129,9 @@ class OligoProbeBuilder(Loggable):
 
 		assert_type(self.Ps, int, "Ps")
 		assert self.Ps > 1
+
+		assert_type(self.Ph, float, "Ph")
+		assert_inInterv(self.Ph, 0, 1, "Ph")
 
 	def get_non_overlapping_probes(self, oData):
 		# Gets all sets of N consecutive non-overlapping oligos with minimum
@@ -178,6 +182,10 @@ class OligoProbeBuilder(Loggable):
 				probe_size -= pData['start'].values[0]
 				if self.Ps < probe_size:
 					continue
+				dData = pData['start'].values[1:] - pData['end'].values[:-1]
+				max_hole_size = dData.max()
+				if self.Ph * probe_size < max_hole_size:
+					continue
 				Tm_range = pData['Tm'].max()-pData['Tm'].min()
 				if 2*self.Tr < Tm_range:
 					continue
@@ -190,6 +198,10 @@ class OligoProbeBuilder(Loggable):
 					probe_size = pData['end'].values[-1]
 					probe_size -= pData['start'].values[0]
 					if self.Ps < probe_size:
+						continue
+					dData = pData['start'].values[1:] - pData['end'].values[:-1]
+					max_hole_size = dData.max()
+					if self.Ph * probe_size < max_hole_size:
 						continue
 					Tm_range = pData['Tm'].max()-pData['Tm'].min()
 					if 2*self.Tr < Tm_range:
@@ -210,9 +222,9 @@ class GenomicWindowSet(object):
 	_window_sets = None
 
 	S = int(3000000)	# Region start coordinate (included)
-	E = int(3100000)	# Region end coordinate (excluded)
+	E = int(3500000)	# Region end coordinate (excluded)
 
-	X = 2				# Number of probes to design
+	X = 20				# Number of probes to design
 	Ws = None			# Window size (used when X is not provided)
 	Wh = 0.1			# Window shift (as a percentage of the window size)
 
@@ -355,6 +367,10 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 	def current_oligos(self):
 		return self.__current_oligos
 
+	def remove_oligos_starting_before(self, pos):
+		self.__current_oligos = [o for o in self.current_oligos
+			if o.start >= pos]
+
 	@property
 	def probe_candidates(self):
 		return self.__probe_candidates	
@@ -472,19 +488,17 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 				if oligo.start >= self.current_window['end']:
 					DBHpb.clear()
 					self.__select_from_window()
-
 					if self.reached_last_window:
 						break
 
 					self.go_to_next_window()
 					self.__preprocess_window()
 					self.__load_windows_until_next_to_do()
-
 					if self.reached_last_window:
 						break
-
-					self.current_oligos = [o for o in self.current_oligos
-						if o.start >= self.current_window['start']]
+					if 0 != len(self.current_oligos):
+						self.remove_oligos_starting_before(
+							self.current_window['start'])
 
 				if oligo.end > self.E:	# End reached
 					break
@@ -597,25 +611,31 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		else:
 			self.log.warning(f"Window {window_tag} does not have enough" +
 				f" oligos {len(self.current_oligos)}/{self.N}, skipped.")
+			return
 		
-		self.log.info(f"Built {len(probe_list)} oligo probe candidates")
-		self.log.handlers = self.log.handlers[:-1]
+		if 0 == len(probe_list):
+			self.log.critical(f"Built {len(probe_list)} oligo probe candidates")
+			self.log.handlers = self.log.handlers[:-1]
+		else:
+			self.log.info(f"Built {len(probe_list)} oligo probe candidates")
+			self.log.handlers = self.log.handlers[:-1]
 
-		probe_df = pd.concat([op.featDF for op in probe_list],
-			ignore_index = True)
-		probe_df.to_csv(os.path.join(win_path, "probe_feat.tsv"), "\t")
+			probe_df = pd.concat([op.featDF for op in probe_list],
+				ignore_index = True)
+			probe_df.sort_values("start", inplace = True)
+			probe_df.to_csv(os.path.join(win_path, "probe_feat.tsv"), "\t")
 
-		pd.concat([p.data for p in probe_list]).drop_duplicates().to_csv(
-			os.path.join(win_path, "oligos.tsv"), "\t")
+			pd.concat([p.data for p in probe_list]).drop_duplicates().to_csv(
+				os.path.join(win_path, "oligos.tsv"), "\t")
 
-		probe_paths = []
-		for pi in range(len(probe_list)):
-			probe_paths.append([",".join([str(x)
-				for x in probe_list[pi].data.index.tolist()])])
-		probe_paths = pd.DataFrame(probe_paths)
-		probe_paths.columns = ["cs_oligos"]
-		probe_paths.to_csv(os.path.join(win_path, "probe_paths.tsv"), "\t")
-		
+			probe_paths = []
+			for pi in range(len(probe_list)):
+				probe_paths.append([",".join([str(x)
+					for x in probe_list[pi].data.index.tolist()])])
+			probe_paths = pd.DataFrame(probe_paths)
+			probe_paths.columns = ["cs_oligos"]
+			probe_paths.to_csv(os.path.join(win_path, "probe_paths.tsv"), "\t")
+			
 		Path(os.path.join(win_path, ".done")).touch()
 
 		if not int(window['s']) in self.probe_candidates.keys():
@@ -908,7 +928,7 @@ class OligoProbe(object):
 	def d_range(self):
 		return self._d_range
 
-@property
+	@property
 	def d_mean(self):
 		return self._d_mean
 
