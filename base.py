@@ -375,8 +375,8 @@ class OligoWalker(OligoProbeBuilder):
 
 		self.r = 0 # Record ID
 
-		pbDBH = tqdm(DBH, leave = None, desc = "Parsing records")
-		for oligo in pbDBH:
+		DBHpb = tqdm(DBH, leave = None, desc = "Parsing records")
+		for oligo in DBHpb:
 			oligo = oligo.strip().split("\t")
 			for i in [2, 3, 9, 10]:
 				oligo[i] = int(oligo[i])
@@ -389,7 +389,7 @@ class OligoWalker(OligoProbeBuilder):
 			if oligo['start'].values[0] >= start_of_current_window:
 				end_of_current_window = self.window_sets['end'].values[self.w]
 				if oligo['start'].values[0] >= end_of_current_window:
-					pbDBH.clear()
+					DBHpb.clear()
 					self.__select_from_window()
 					if self.w == self.window_sets.shape[0]-1:
 						break
