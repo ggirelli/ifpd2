@@ -158,20 +158,21 @@ class OligoWalker(OligoProbeBuilder):
 
 	C = "chr18"			# Chromosome
 	S = int(3000000)	# Region start coordinate (included)
-	E = int(4000000)	# Region end coordinate (excluded)
-	X = 20				# Number of probes to design
+	E = int(3500000)	# Region end coordinate (excluded)
+	k = 40
+	X = 2				# Number of probes to design
 	Ws = None			# Window size (used when X is not provided)
 	Wh = 0.1			# Window shift (as a percentage of the window size)
 
-	Rs = int(1000)		# Region focus size, either in nt (Rs > 1)
+	Rs = int(8000)		# Region focus size, either in nt (Rs > 1)
 						#  or fraction of Ws (0<Rs<=1)
 						#  When provided in nt, it is applied only if Rs<Ws
 	Rt = int(1000)		# Region focus step, either in nt (Rt > 1)
 						#  or fraction of Rs (0<Rt<=1),
 						#  for focus region expansion
 
-	F = (100, 1000)		# Threshold on number of off-targets (range)
-	Gs = (0.0, 0.2)		# dG of SS either as kcal/mol (negative)
+	F = (0, 100)		# Threshold on number of off-targets (range)
+	Gs = (0.0, 0.5)		# dG of SS either as kcal/mol (negative)
 						#  or as fraction dG of hybrid (0<=Gs<=1)
 						#  (range)
 	Ot = .1				# Step for oligo score relaxation
@@ -234,7 +235,7 @@ class OligoWalker(OligoProbeBuilder):
 		assert 2 == len(self.F)
 		for i in range(2):
 			assert_type(self.F[i], int, f"F[{i}]")
-			assert_nonNeg(self.F[i], f"F[{i}]")
+			assert self.F[i] >= 0
 		assert self.F[1] >= self.F[0]
 
 		assert_type(self.Gs, tuple, "Gs")
