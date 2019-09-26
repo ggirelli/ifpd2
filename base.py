@@ -364,9 +364,14 @@ class OligoWalker(OligoProbeBuilder):
 
 		self.w = 0 # Window ID
 		self.__preprocess_window()
-		while self.__window_processed() and self.w < self.window_sets.shape[0]:
+		nWindows = self.window_sets.shape[0]
+		while self.__window_processed() and self.w < nWindows-1:
 			self.w += 1
 			self.__preprocess_window()
+
+		if self.w == nWindows-1 and self.__window_processed:
+			self.log.info("All windows pre-processed. Skipped database walk.")
+			return
 
 		self.r = 0 # Record ID
 
@@ -391,10 +396,14 @@ class OligoWalker(OligoProbeBuilder):
 
 					self.w += 1
 					self.__preprocess_window()
+
 					nWindows = self.window_sets.shape[0]
-					while self.__window_processed() and self.w < nWindows:
+					while self.__window_processed() and self.w < nWindows-1:
 						self.w += 1
 						self.__preprocess_window()
+
+					if self.w == self.window_sets.shape[0]-1:
+						break
 
 					start_of_current_window = self.window_sets.iloc[
 						self.w, :]['start']
@@ -594,7 +603,7 @@ class OligoWalker(OligoProbeBuilder):
 		return(probe_list)
 
 	def __build_probe_set_candidates(self):
-		for (wSet, windows) in self.probe_candidates:
+		for (wSet, windows) in self.probe_candidates.items():
 			nsets = np.prod([len(probes) for probes in windows])
 			self.log.info(f"{nsets} probe set candidates from window set #{wSet+1}")
 
