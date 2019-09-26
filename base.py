@@ -27,7 +27,7 @@ from tqdm import tqdm
 # CLASSES ======================================================================
 
 class Loggable(object):
-	"""docstring for Loggable"""
+	"""Shows logger instance to children classes."""
 	def __init__(self, logger = logging.getLogger(),
 		formatter = logging.Formatter(
 			'%(asctime)s %(levelname)s:\t%(message)s',
@@ -47,7 +47,8 @@ class Loggable(object):
 		self.log.addHandler(fileHandler)
 
 class Oligo(object):
-	"""docstring for Oligo"""
+	"""Oligo database line/record parser.
+	Presents oligo values as properties."""
 
 	colnames = ['name', 'chrom', 'start', 'end', 'tm_dG',
 		'dH', 'dS', 'Tm', 'seq', 'nOT', 'k', 'ss_dG']
@@ -204,7 +205,7 @@ class OligoProbeBuilder(Loggable):
 		return(probe_list)
 
 class GenomicWindowSet(object):
-	"""docstring for GenomicWindowSet"""
+	"""Genomic window manager."""
 
 	window_sets = None
 
@@ -217,24 +218,6 @@ class GenomicWindowSet(object):
 
 	def __init__(self):
 		super(GenomicWindowSet, self).__init__()
-
-	@property
-	def wid(self):
-		return self._w
-
-	@property
-	def current_window(self):
-		return self.window_sets.iloc[self.wid, :]
-
-	@property
-	def reached_last_window(self):
-		return self._reached_last_window
-
-	def go_to_next_window(self):
-		if self.wid < self.window_sets.shape[0]-1:
-			self._w += 1
-		if self.wid == self.window_sets.shape[0]-1:
-			self._reached_last_window = True
 
 	def _assert(self):
 		assert_type(self.S, int, "S")
@@ -309,6 +292,24 @@ class GenomicWindowSet(object):
 
 		self._w = 0 # Window ID
 		self._reached_last_window = False
+	
+	@property
+	def wid(self):
+		return self._w
+
+	@property
+	def current_window(self):
+		return self.window_sets.iloc[self.wid, :]
+
+	@property
+	def reached_last_window(self):
+		return self._reached_last_window
+
+	def go_to_next_window(self):
+		if self.wid < self.window_sets.shape[0]-1:
+			self._w += 1
+		if self.wid == self.window_sets.shape[0]-1:
+			self._reached_last_window = True
 
 class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 	"""OligoWalker walks through the oligos stored in an ifpd2 database,
