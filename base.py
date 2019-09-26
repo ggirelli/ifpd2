@@ -487,6 +487,12 @@ class OligoWalker(OligoProbeBuilder):
 						int(window['s'])][int(window['w'])
 						] = self.__import_window_output(win_path)
 					return
+				else:
+					shutil.rmtree(win_path)
+					os.mkdir(win_path)
+			else:
+				shutil.rmtree(win_path)
+				os.mkdir(win_path)
 
 		window.to_csv(os.path.join(win_path, "window.tsv"),
 			sep = "\t", index = True)
@@ -607,8 +613,8 @@ class OligoWalker(OligoProbeBuilder):
 
 	def __build_probe_set_candidates(self):
 		for (wSet, windows) in self.probe_candidates.items():
-			nsets = np.prod([len(probes) for probes in windows])
-			self.log.info(f"{nsets} probe set candidates from window set #{wSet+1}")
+			nProbes = [len(probes) for probes in windows.values()]
+			self.log.info(f"{nProbes} probe candidates from window set #{wSet+1}")
 
 class OligoGroup(Loggable):
 	"""Allows to select oligos from a group based on a "focus" window of
@@ -813,7 +819,7 @@ class OligoProbe(object):
 		df = pd.DataFrame([self.range[0], self.range[1], self._data.shape[0],
 			self.size, self.spread, self.d_range[0], self.d_range[1],
 			self.tm_range]).transpose()
-		df.columns = ["start", "end", "size", "nOligos",
+		df.columns = ["start", "end", "nOligos", "size",
 			"spread", "d_min", "d_max", "tm_range"]
 		return df
 
