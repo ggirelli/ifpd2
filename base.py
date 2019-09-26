@@ -292,7 +292,7 @@ class GenomicWindowSet(object):
 
 		self._w = 0 # Window ID
 		self._reached_last_window = False
-	
+
 	@property
 	def wid(self):
 		return self._w
@@ -354,12 +354,12 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 
 	@property
 	def window_set_path(self):
-		return = os.path.join(self.out_path,
+		return os.path.join(self.out_path,
 			f"set_{int(self.current_window['s'])}")
 
 	@property
 	def window_path(self):
-		return = os.path.join(self.window_set_path,
+		return os.path.join(self.window_set_path,
 			f"window_{int(self.current_window['w'])}")
 
 	def _assert(self):
