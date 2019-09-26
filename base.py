@@ -41,7 +41,7 @@ class Loggable(object):
 		return self._logger
 
 	def addFileHandler(self, path, mode="w+", level=logging.DEBUG):
-		fileHandler = logging.FileHandler(path, "a+")
+		fileHandler = logging.FileHandler(path, mode)
 		fileHandler.setFormatter(self._formatter)
 		fileHandler.setLevel(level)
 		self.log.addHandler(fileHandler)
@@ -183,7 +183,7 @@ class OligoWalker(OligoProbeBuilder):
 		self.__mk_windows()
 		self.__print_prologue()
 		self.__walk_db()
-		pass
+		self.__build_probe_set_candidates()
 
 	def _assert(self):
 		super(OligoWalker, self)._assert()
@@ -380,8 +380,7 @@ class OligoWalker(OligoProbeBuilder):
 			oligo = pd.DataFrame(oligo).transpose()
 			oligo.columns = dtype
 
-			start_of_current_window = self.window_sets.iloc[
-				self.w, 'start'].values
+			start_of_current_window = self.window_sets.iloc[self.w, :]['start']
 			if oligo['start'].values[0] >= start_of_current_window:
 				end_of_current_window = self.window_sets['end'].values[self.w]
 				if oligo['start'].values[0] >= end_of_current_window:
@@ -398,9 +397,9 @@ class OligoWalker(OligoProbeBuilder):
 						self.__preprocess_window()
 
 					start_of_current_window = self.window_sets.iloc[
-						self.w, 'start'].values
+						self.w, :]['start']
 					self.current_oligos = [o for o in self.current_oligos
-						if o['start'].values[0] >= window_start]
+						if o['start'].values[0] >= start_of_current_window]
 
 				if oligo['end'].values[0] > self.E:	# End reached
 					break
@@ -594,6 +593,11 @@ class OligoWalker(OligoProbeBuilder):
 
 		return(probe_list)
 
+	def __build_probe_set_candidates(self):
+		for (wSet, windows) in self.probe_candidates:
+			nsets = np.prod([len(probes) for probes in windows])
+			self.log.info(f"{nsets} probe set candidates from window set #{wSet+1}")
+
 class OligoGroup(Loggable):
 	"""Allows to select oligos from a group based on a "focus" window of
 	interest. The window can be expanded to the closest oligo or to retain at
@@ -749,7 +753,7 @@ class OligoGroup(Loggable):
 		self._oligos_passing_score_filter = self._data['score'] <= threshold
 
 class OligoProbe(object):
-	"""docstring for OligoProbe"""
+	"""Converts a DataFrame of oligo data into an OligoProbe."""
 
 	def __init__(self, oligo_data):
 		super(OligoProbe, self).__init__()
@@ -806,6 +810,17 @@ class OligoProbe(object):
 		rep += f":{self.size}:{self.spread}]>"
 		return rep
 
+class OligoProbeSet(object):
+	"""docstring for OligoProbeSet"""
+
+	def __init__(self, probe_list):
+		super(OligoProbeSet, self).__init__()
+		self.probe_list = probe_list
+
+	@property
+	def probe_list(self):
+		return self._probe_list
+
 # FUNCTIONS ====================================================================
 
 def assert_type(x, stype, label):
@@ -851,7 +866,7 @@ consoleHandler.setLevel(logging.DEBUG)
 logger.addHandler(consoleHandler)
 logger = Loggable(logger)
 
-logPath = "{0}/{1}.log".format(out_path, "test")
+logPath = "{0}/{1}.log".format(out_path, "ifpd2")
 logger.addFileHandler(logPath)
 
 logger.log.info(f"This log is saved at '{logPath}'.")
