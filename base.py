@@ -658,6 +658,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		probe_list = self.__explore_filter(oGroup)
 		if not np.isnan(self.window_sets.loc[self.wid, 'cfr_start']):
 			while 0 == len(probe_list):
+				oGroup.reset_threshold()
 				if not oGroup.expand_focus_by_step(self.Rt):
 					break
 				probe_list = self.__explore_filter(oGroup)
@@ -667,11 +668,13 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		return(probe_list)
 
 	def __explore_filter(self, oGroup):
-		# Explores the 0-to-max_score score threshold range and stops as soon as one
-		# probe candidate passes all user-defined thresholds
+		# Explores the 0-to-max_score score threshold range and stops as soon as
+		# one probe candidate passes all user-defined thresholds
 		
 		if oGroup.focus_window_size < self.Ps:
 			max_score = 0
+			self.log.warning("Score relaxation deactivated when focus region" +
+				" size is smaller than probe size threshold.")
 		else:
 			max_score = 1
 
@@ -792,19 +795,14 @@ class OligoGroup(Loggable):
 		self.set_focus_window(self._data.loc[:,'start'].min(),
 			self._data.loc[:,'start'].max()+1)
 
-	def reset_focus_window(self):
-		if isinstance(self.focus_window, type(None)):
-			return
-		(start, end) = self.focus_window
+	def set_focus_window(self, start, end, verbose = True):
+		# Set a sub-window of interest to focus on
+		self.focus_window = (start, end)
+
 		start_condition = self._data['start'].values >= self.focus_window[0]
 		end_condition = self._data['end'].values < self.focus_window[1]
 		self._oligos_in_focus_window = np.logical_and(
 			start_condition, end_condition)
-
-	def set_focus_window(self, start, end, verbose = True):
-		# Set a sub-window of interest to focus on
-		self.focus_window = (start, end)
-		self.reset_focus_window()
 
 		if verbose:
 			nOligos = self.get_n_focused_oligos()
@@ -840,8 +838,8 @@ class OligoGroup(Loggable):
 				return False
 
 		new_focus_start, new_focus_end = self.focus_window
-		new_focus_start -= step
-		new_focus_end += step
+		new_focus_start -= step/2
+		new_focus_end += step/2
 		new_focus_start = np.max([new_focus_start, self._data['start'].min()])
 		new_focus_end = np.min([new_focus_end, self._data['end'].max()])
 
@@ -888,8 +886,10 @@ class OligoGroup(Loggable):
 	def apply_threshold(self, threshold):
 		# Unfocuses oligos with score higher than the threshold
 		assert threshold <= 1 and threshold >= 0
-		self.reset_focus_window()
 		self._oligos_passing_score_filter = self._data['score'] <= threshold
+
+	def reset_threshold(self):
+		self.apply_threshold(1)
 
 class OligoProbe(object):
 	"""Converts a DataFrame of oligo data into an OligoProbe."""
