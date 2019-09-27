@@ -659,6 +659,8 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		if not np.isnan(self.window_sets.loc[self.wid, 'cfr_start']):
 			while 0 == len(probe_list):
 				oGroup.reset_threshold()
+				if oGroup.focus_window_size >= self.Ps:
+					oGroup.discard_focused_oligos((self.N-1)*(self.k+self.D))
 				if not oGroup.expand_focus_by_step(self.Rt):
 					break
 				probe_list = self.__explore_filter(oGroup)
@@ -890,6 +892,21 @@ class OligoGroup(Loggable):
 
 	def reset_threshold(self):
 		self.apply_threshold(1)
+
+	def discard_focused_oligos(self, safeDist):
+		start = self.data.loc[self.oligos_in_focus_window, "start"].min()
+		end = self.data.loc[self.oligos_in_focus_window, "end"].max()+1
+		discard_window = (start+safeDist, end-safeDist)
+		start_condition = self.data['start'] < start+safeDist
+		end_condition = self.data['end'] >= end-safeDist
+		keep_condition = np.logical_or(start_condition, end_condition)
+		self.log.info(f"Discarded {self.data.shape[0]-keep_condition.sum()}" +
+			f" oligos from the [{start}:{end}) range.")
+		self._data = self._data.loc[keep_condition, :]
+		self._oligos_in_focus_window = self._oligos_in_focus_window[
+			keep_condition]
+		self._oligos_passing_score_filter = self._oligos_passing_score_filter[
+			keep_condition]
 
 class OligoProbe(object):
 	"""Converts a DataFrame of oligo data into an OligoProbe."""
