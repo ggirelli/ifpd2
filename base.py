@@ -896,9 +896,10 @@ class OligoGroup(Loggable):
 	def discard_focused_oligos(self, safeDist):
 		start = self.data.loc[self.oligos_in_focus_window, "start"].min()
 		end = self.data.loc[self.oligos_in_focus_window, "end"].max()+1
-		discard_window = (start+safeDist, end-safeDist)
-		start_condition = self.data['start'] < start+safeDist
-		end_condition = self.data['end'] >= end-safeDist
+		if start >= end:
+			return
+		start_condition = self.data['end'] < start+safeDist
+		end_condition = self.data['start'] >= end-safeDist
 		keep_condition = np.logical_or(start_condition, end_condition)
 		self.log.info(f"Discarded {self.data.shape[0]-keep_condition.sum()}" +
 			f" oligos from the [{start}:{end}) range.")
