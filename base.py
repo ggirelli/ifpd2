@@ -79,7 +79,8 @@ class Oligo(object):
 			return self.data['score'].values[0]
 		return np.nan
 	
-	def __norm_value_in_range(self, v, r):
+	@staticmethod
+	def __norm_value_in_range(v, r):
 		if 0 == r[1]: return np.nan
 		return (v - r[0])/(r[1] - r[0])
 
@@ -133,9 +134,9 @@ class OligoProbeBuilder(Loggable):
 		assert_type(self.Ph, float, "Ph")
 		assert_inInterv(self.Ph, 0, 1, "Ph")
 
-	def get_non_overlapping_probes(self, oData):
-		# Gets all sets of N consecutive non-overlapping oligos with minimum
-		# distance equal to D and melting temperature range of +-Tr
+	def get_non_overlapping_paths(self, oData):
+		# Gets all paths of N consecutive non-overlapping oligos with minimum
+		# distance equal to D
 		assert_type(oData, pd.DataFrame, "oData")
 
 		edges = []
@@ -174,6 +175,18 @@ class OligoProbeBuilder(Loggable):
 				else:
 					break
 
+			path_set.add(tuple(path))
+			path_start_set.add(path[0])
+
+		return path_set
+
+	def filter_paths(self, path_set, oData):
+		# Selects oligo paths based on length, melting temperature, size, and
+		# presence of gaps.
+		assert_type(oData, pd.DataFrame, "oData")
+		selected_paths = []
+		for path in list(path_set):
+			path = list(path)
 			if self.N > len(path):
 				continue
 			elif self.N == len(path):
@@ -189,8 +202,7 @@ class OligoProbeBuilder(Loggable):
 				Tm_range = pData['Tm'].max()-pData['Tm'].min()
 				if 2*self.Tr < Tm_range:
 					continue
-				path_set.add(tuple(path))
-				path_start_set.add(path[0])
+				selected_paths.append(tuple(path))
 			else:
 				for j in range(len(path) - self.N + 1):
 					subpath = path[j:(j + self.N)]
@@ -206,15 +218,23 @@ class OligoProbeBuilder(Loggable):
 					Tm_range = pData['Tm'].max()-pData['Tm'].min()
 					if 2*self.Tr < Tm_range:
 						continue
-					path_set.add(tuple(subpath))
-					path_start_set.add(subpath[0])
+					selected_paths.append(tuple(subpath))
+		return selected_paths
 
+	@staticmethod
+	def convert_paths_to_probes(path_list, oData):
+		# Converts a list of paths into a list of probes
+		assert_type(path_list, list, "path list")
 		probe_list = []
-		if 0 != len(path_set):
-			for path in list(path_set):
-				probe_list.append(OligoProbe(oData.iloc[list(path), :]))
+		if 0 != len(path_list):
+			for path in path_list:
+				probe_list.append(OligoProbeBuilder.path2probe(path, oData))
+		return probe_list
 
-		return(probe_list)
+	@staticmethod
+	def path2probe(path, oData):
+		# Convert an oligo path into an OligoProbe
+		return OligoProbe(oData.iloc[list(path), :])
 
 class GenomicWindowSet(object):
 	"""Genomic window manager."""
@@ -671,6 +691,19 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		
 		return(probe_list)
 
+	def __get_non_overlapping_probes(self, oData, verbosity = True):
+		paths = self.get_non_overlapping_paths(oData)
+		if verbosity:
+			nPaths = len(paths)
+			pathMaxLen = np.max([len(p) for p in list(paths)])
+			self.log.info(f"Found {nPaths} sets with up to {pathMaxLen} " +
+				f"non-overlapping oligos.")
+		paths = self.filter_paths(paths, oData)
+		if verbosity:
+			self.log.info(f"{len(paths)}/{nPaths} oligo paths remaining " +
+				"after filtering.")
+		return self.convert_paths_to_probes(paths, oData)
+
 	def __explore_filter(self, oGroup):
 		# Explores the 0-to-max_score score threshold range and stops as soon as
 		# one probe candidate passes all user-defined thresholds
@@ -700,7 +733,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
 				f" ({nOligos_prev_score_thr} oligos usable)...")
 
-		probe_list = self.get_non_overlapping_probes(
+		probe_list = self.__get_non_overlapping_probes(
 			oGroup.get_focused_oligos(True))
 		while 0 == len(probe_list):
 			score_thr += self.Ot
@@ -717,7 +750,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 
 			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
 				f" ({nOligosUsable} oligos usable)...")
-			probe_list = self.get_non_overlapping_probes(
+			probe_list = self.__get_non_overlapping_probes(
 				oGroup.get_focused_oligos(True))
 
 			if nOligosUsable == nOligos_in_focus_window:
@@ -770,7 +803,7 @@ class OligoGroup(Loggable):
 	@property
 	def oligos_in_focus_window(self):
 		return self._oligos_in_focus_window
-	
+
 	@property
 	def oligos_passing_score_filter(self):
 		return self._oligos_passing_score_filter
@@ -900,8 +933,7 @@ class OligoGroup(Loggable):
 		# CFR borders
 		start = self.data.loc[self.oligos_in_focus_window, "start"].min()
 		end = self.data.loc[self.oligos_in_focus_window, "end"].max()+1
-		self.__discard_oligos_in_range(start+safeDist, end-safeDist)
-		
+		self.__discard_oligos_in_range(start+safeDist, end-safeDist)	
 
 	def discard_focused_oligos_safeN(self, safeN, D):
 		# Discard focused oligos that are neither the first nor the last safeN
