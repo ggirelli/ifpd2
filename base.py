@@ -660,7 +660,9 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			while 0 == len(probe_list):
 				oGroup.reset_threshold()
 				if oGroup.focus_window_size >= self.Ps:
-					oGroup.discard_focused_oligos((self.N-1)*(self.k+self.D))
+					#oGroup.discard_focused_oligos_safeDist(
+					#	(self.N-1)*(self.k+self.D))
+					oGroup.discard_focused_oligos_safeN(self.N-1, self.D)
 				if not oGroup.expand_focus_by_step(self.Rt):
 					break
 				probe_list = self.__explore_filter(oGroup)
@@ -893,7 +895,9 @@ class OligoGroup(Loggable):
 	def reset_threshold(self):
 		self.apply_threshold(1)
 
-	def discard_focused_oligos(self, safeDist):
+	def discard_focused_oligos_safeDist(self, safeDist):
+		# Discard focused oligos that are not within a safe distance from the
+		# CFR borders
 		start = self.data.loc[self.oligos_in_focus_window, "start"].min()
 		end = self.data.loc[self.oligos_in_focus_window, "end"].max()+1
 		if start >= end:
@@ -901,8 +905,56 @@ class OligoGroup(Loggable):
 		start_condition = self.data['end'] < start+safeDist
 		end_condition = self.data['start'] >= end-safeDist
 		keep_condition = np.logical_or(start_condition, end_condition)
-		self.log.info(f"Discarded {self.data.shape[0]-keep_condition.sum()}" +
+		nDiscarded = self.oligos_in_focus_window.sum()-keep_condition.sum()
+		self.log.info(f"Discarded {nDiscarded}" +
 			f" oligos from the [{start}:{end}) range.")
+		self.__apply_keep_condition(keep_condition)
+
+	def discard_focused_oligos_safeN(self, safeN, D):
+		# Discard focused oligos that are neither the first nor the last safeN
+		thr = self.data.loc[self.oligos_in_focus_window, "end"].values[0] + D+1
+		keep_from_start = []
+		c = 1
+		for oid in range(self.data.shape[0]):
+			if not self.oligos_in_focus_window[oid]:
+				keep_from_start.append(True)
+			oligo = self.data.iloc[oid, :]
+			if oligo['start'] < thr:
+				keep_from_start.append(True)
+			else:
+				if c == safeN:
+					keep_from_start.append(False)
+				else:
+					c += 1
+					thr = self.data.iloc[oid, :]["end"] + D+1
+					keep_from_start.append(True)
+
+		thr = self.data.loc[self.oligos_in_focus_window, "start"].values[-1]+D
+		keep_from_end = []
+		c = 1
+		for oid in range(self.data.shape[0]):
+			if not self.oligos_in_focus_window[oid]:
+				keep_from_end.append(True)
+			oligo = self.data.iloc[oid, :]
+			if oligo['end'] >= thr:
+				keep_from_end.append(True)
+			else:
+				if c == safeN:
+					keep_from_end.append(False)
+				else:
+					c += 1
+					thr = self.data.iloc[oid, :]["start"] + D
+					keep_from_end.append(True)
+
+		keep_condition = np.logical_or(keep_from_start, keep_from_end)
+		if all(keep_condition):
+			self.log.info("No oligos to be discarded.")
+			return
+		nDiscarded = self.oligos_in_focus_window.sum()-keep_condition.sum()
+		self.log.info(f"Discarded {nDiscarded} oligos (safeN = {safeN}).")
+		self.__apply_keep_condition(keep_condition)
+
+	def __apply_keep_condition(self, keep_condition):
 		self._data = self._data.loc[keep_condition, :]
 		self._oligos_in_focus_window = self._oligos_in_focus_window[
 			keep_condition]
