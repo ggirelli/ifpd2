@@ -203,7 +203,7 @@ class OligoProbeBuilder(Loggable):
 		assert_type(oData, pd.DataFrame, "oData")
 
 		selected_paths = set()
-		exit_polls = {'P':0, 'N':0, 'S':0, 'T':0, 'H':0}
+		exit_polls = {'P':0, 'N':0, 'S':0, 'H':0, 'T':0}
 		for path in list(path_set):
 			if path in selected_paths: continue
 			if self.N > len(path):
@@ -765,11 +765,15 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 
 	def __get_non_overlapping_probes(self, oData, verbosity = True):
 		paths = self.get_non_overlapping_paths(oData)
+		pathMaxLen = np.max([len(p) for p in list(paths)])
 		if verbosity:
 			nPaths = len(paths)
-			pathMaxLen = np.max([len(p) for p in list(paths)])
 			self.log.info(f"Found {nPaths} sets with up to {pathMaxLen} " +
 				f"non-overlapping oligos.")
+		if pathMaxLen < self.N:
+			self.log.warning(f"Longest path is shorter than requested. " + 
+				"Skipped.")
+			return []
 
 		paths, comment = self.filter_paths(paths, oData)
 		if verbosity:
