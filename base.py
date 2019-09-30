@@ -109,7 +109,7 @@ class OligoProbeBuilder(Loggable):
 	"""OligoProbeBuilder contains methods to select non-overlapping sets of
 	oligos (i.e., probes) from an oligo DataFrame in input."""
 
-	N = int(96)			# Number of oligos per probe
+	N = int(48)			# Number of oligos per probe
 	D = int(2)			# Minimum distance between consecutive oligos
 	Tr = 10.0			# Melting temperature range half-width
 	Ps = int(10000)		# Probe size threshold, in nt (Ps > 1)
@@ -713,8 +713,8 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		else:
 			self.log.info(f"Built {len(probe_list)} oligo probe candidates")
 			self.log.handlers = self.log.handlers[:-1]
+			self.__export_probes(probe_list)			
 
-		self.__export_probes(probe_list)			
 		Path(os.path.join(self.window_path, ".done")).touch()
 
 		if not int(window['s']) in self.probe_candidates.keys():
@@ -1034,7 +1034,7 @@ class OligoGroup(Loggable):
 
 		c = 1
 		while c <= safeN:
-			passing_oData = oData.loc[oData['start'] > start]
+			passing_oData = oData.loc[oData['start'] > start, :]
 			if 0 == passing_oData.shape[0]:
 				self.log.info("Not enough oligos, skipped discard step.")
 				return
