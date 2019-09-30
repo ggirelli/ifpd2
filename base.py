@@ -873,6 +873,11 @@ class OligoGroup(Loggable):
 		assert 2 == len(focus_window)
 		assert focus_window[1] > focus_window[0]
 		self._focus_window = focus_window
+
+	@property
+	def focus_window_repr(self):
+		return f"[{self.focus_window_repr[0]}:{self.focus_window_repr[1]})"
+	
 	
 	@property
 	def focus_window_size(self):
@@ -922,7 +927,7 @@ class OligoGroup(Loggable):
 		if verbose:
 			nOligos = self.get_n_focused_oligos()
 			nOligosUsable = self.get_n_focused_oligos(True)
-			self.log.info(f"Set focus region to {self.focus_window}" +
+			self.log.info(f"Set focus region to {self.focus_window_repr}" +
 				f" ({nOligos} oligos, {nOligosUsable} usable)")
 
 	def expand_focus_to_n_oligos(self, n, verbose = True):
