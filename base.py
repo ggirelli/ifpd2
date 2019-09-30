@@ -50,7 +50,7 @@ class Oligo(object):
 	"""Oligo database line/record parser.
 	Presents oligo values as properties."""
 
-	colnames = ['name', 'chrom', 'start', 'end', 'tm_dG',
+	__colnames = ['name', 'chrom', 'start', 'end', 'tm_dG',
 		'dH', 'dS', 'Tm', 'seq', 'nOT', 'k', 'ss_dG']
 
 	def __init__(self, oligo, i):
@@ -63,7 +63,7 @@ class Oligo(object):
 		for i in [4, 5, 6, 7, 11]:
 			oligo[i] = float(oligo[i])
 		self.data = pd.DataFrame(oligo,
-			columns=[i], index=self.colnames).transpose()
+			columns=[i], index=self.__colnames).transpose()
 
 	@property
 	def start(self):
@@ -653,10 +653,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		window_tag = f"{int(window['s'])}.{int(window['w'])}"
 		window_range = f"[{int(window['start'])}:{int(window['end'])}]"
 
-		set_path = os.path.join(self.out_path,f"set_{int(window['s'])}")
-		win_path = os.path.join(set_path,f"window_{int(window['w'])}")
-
-		self.addFileHandler(os.path.join(win_path, "window.log"))
+		self.addFileHandler(os.path.join(self.window_path, "window.log"))
 
 		if len(self.current_oligos) >= self.N:
 			oGroup = OligoGroup(self.current_oligos, self.log)
@@ -676,29 +673,32 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			self.log.info(f"Built {len(probe_list)} oligo probe candidates")
 			self.log.handlers = self.log.handlers[:-1]
 
-			probe_df = pd.concat([op.featDF for op in probe_list],
-				ignore_index = True)
-			probe_df.sort_values("start", inplace = True)
-			probe_df.to_csv(os.path.join(win_path, "probe_feat.tsv"), "\t")
-
-			pd.concat([p.data for p in probe_list]).drop_duplicates().to_csv(
-				os.path.join(win_path, "oligos.tsv"), "\t")
-
-			probe_paths = []
-			for pi in range(len(probe_list)):
-				probe_paths.append([",".join([str(x)
-					for x in probe_list[pi].data.index.tolist()])])
-			probe_paths = pd.DataFrame(probe_paths)
-			probe_paths.columns = ["cs_oligos"]
-			probe_paths.to_csv(os.path.join(win_path, "probe_paths.tsv"), "\t")
-			
-		Path(os.path.join(win_path, ".done")).touch()
+		self.__export_probes(probe_list)			
+		Path(os.path.join(self.window_path, ".done")).touch()
 
 		if not int(window['s']) in self.probe_candidates.keys():
 			self.probe_candidates[int(window['s'])] = {}
 
 		self.probe_candidates[int(window['s'])][int(window['w'])] = probe_list
 		return
+
+	def __export_probes(self, probe_list):
+		probe_df = pd.concat([op.featDF for op in probe_list],
+			ignore_index = True)
+		probe_df.sort_values("start", inplace = True)
+		probe_df.to_csv(os.path.join(self.window_path, "probe_feat.tsv"), "\t")
+
+		pd.concat([p.data for p in probe_list]).drop_duplicates().to_csv(
+			os.path.join(self.window_path, "oligos.tsv"), "\t")
+
+		probe_paths = []
+		for pi in range(len(probe_list)):
+			probe_paths.append([",".join([str(x)
+				for x in probe_list[pi].data.index.tolist()])])
+		probe_paths = pd.DataFrame(probe_paths)
+		probe_paths.columns = ["cs_oligos"]
+		probe_paths.to_csv(os.path.join(
+			self.window_path, "probe_paths.tsv"), "\t")
 
 	def __build_probe_candidates(self, oGroup):
 		# Applies oligo filters to the oligo group,
