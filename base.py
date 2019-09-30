@@ -203,11 +203,11 @@ class OligoProbeBuilder(Loggable):
 
 		selected_paths = set()
 		for path in list(path_set):
-			if path in selected_paths:
-				continue
 			if self.N > len(path):
 				continue
-			elif self.N == len(path):
+			if path in selected_paths:
+				continue
+			if self.N == len(path):
 				if not self.__path_passes(path, oData):
 					continue
 				selected_paths.add(path)
