@@ -876,8 +876,7 @@ class OligoGroup(Loggable):
 
 	@property
 	def focus_window_repr(self):
-		return f"[{self.focus_window_repr[0]}:{self.focus_window_repr[1]})"
-	
+		return f"[{self.focus_window[0]}:{self.focus_window[1]})"
 	
 	@property
 	def focus_window_size(self):
