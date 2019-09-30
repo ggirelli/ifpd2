@@ -17,7 +17,9 @@ reuse = True
 # DEPENDENCIES =================================================================
 
 import configparser as cp
+import copy
 import logging
+import multiprocessing as mp
 import numpy as np
 import os
 import pandas as pd
@@ -29,10 +31,13 @@ from tqdm import tqdm
 
 class Loggable(object):
 	"""Shows logger instance to children classes."""
-	def __init__(self, logger = logging.getLogger(),
-		formatter = logging.Formatter(
-			'%(asctime)s %(levelname)s:\t%(message)s',
-			datefmt = '%d/%m/%Y %I:%M:%S')):
+
+	defaultfmt = '%(asctime)s %(levelname)s:\t%(message)s'
+	datefmt = '%d/%m/%Y %H:%M:%S'
+
+	def __init__(self, logger = logging.getLogger().log,
+		formatter = logging.Formatter('%(asctime)s %(levelname)s:\t%(message)s',
+			datefmt = '%d/%m/%Y %H:%M:%S')):
 		super(Loggable, self).__init__()
 		self._logger = logger
 		self._formatter = formatter
@@ -115,7 +120,7 @@ class OligoProbeBuilder(Loggable):
 	Ps = int(10000)		# Probe size threshold, in nt (Ps > 1)
 	Ph = .1				# Maximum hole size in probe as fraction of probe size
 
-	def __init__(self, logger = logging.getLogger):
+	def __init__(self, logger = logging.getLogger().log):
 		super(OligoProbeBuilder, self).__init__(logger)
 
 	def _assert(self):
@@ -203,7 +208,7 @@ class OligoProbeBuilder(Loggable):
 		assert_type(oData, pd.DataFrame, "oData")
 
 		exit_polls = {'P':0, 'N':0, 'S':0, 'H':0, 'T':0}
-		
+
 		sized_paths = set()
 		for path in list(path_set):
 			if path in sized_paths: continue
@@ -404,6 +409,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 	db_path = None
 	out_path = "."
 	reuse = False
+	threads = 40
 
 	C = "chr18"			# Chromosome
 	k = 40
@@ -424,7 +430,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 	__current_oligos = []
 	__probe_candidates = {}
 
-	def __init__(self, db_path, logger = logging.getLogger):
+	def __init__(self, db_path, logger = logging.getLogger().log):
 		OligoProbeBuilder.__init__(self, logger)
 		GenomicWindowSet.__init__(self)
 		self.db_path = db_path
@@ -561,6 +567,13 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		self.log.info(s)
 
 	def __walk_db(self):
+		if 1 == self.threads:
+			fexec = self.select_from_window
+		else:
+			pool = mp.Pool(np.min([self.threads, mp.cpu_count()]))
+			self.log.info(f"Prepared a pool of {self.threads} threads.")
+			fexec = lambda args: pool.apply_async(
+				self.parallelizable_select_from_window, args)
 		DBH = open(self.db_path, "r")
 		next(DBH)
 
@@ -574,6 +587,8 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		self.r = 0 # Record ID
 		self.rw = 0 # Walk step counter
 
+		probe_data = []
+
 		DBHpb = tqdm(DBH, leave = None, desc = "Parsing records")
 		for line in DBHpb:
 			oligo = Oligo(line, self.r)
@@ -581,7 +596,17 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			if oligo.start >= self.current_window['start']:
 				if oligo.start >= self.current_window['end']:
 					DBHpb.clear()
-					self.__select_from_window()
+					
+					probe_data.append(fexec((self.db_path, self.out_path,
+						self.window_path, self.current_oligos,
+						self.window_sets, self.wid,
+						self.Rs, self.Rt, self.Ot,
+						self.N, self.D, self.Tr, self.Ps, self.Ph
+					)))
+					self.log.info(f"Window {int(self.current_window['s'])}." +
+						f"{int(self.current_window['w'])} " +
+						"sent to processor pool.")
+
 					if self.reached_last_window:
 						break
 
@@ -608,6 +633,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		self.log.info(f"Parsed {self.rw}/{self.r} records.")
 
 		DBH.close()
+		pool.close()
 
 	def __window_done(self):
 		s = int(self.current_window['s'])
@@ -624,10 +650,11 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 
 	def __import_window_output(self):
 		# Imports output for current window
+		pPath = os.path.join(self.window_path, "probe_paths.tsv")
+		if not os.path.isfile(pPath):
+			return []
 		oPath = os.path.join(self.window_path, "oligos.tsv")
 		assert os.path.isfile(oPath)
-		pPath = os.path.join(self.window_path, "probe_paths.tsv")
-		assert os.path.isfile(pPath)
 		
 		oligos = pd.read_csv(oPath, "\t", index_col = 0)
 		paths = pd.read_csv(pPath, "\t", index_col = 0)
@@ -689,12 +716,47 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		with open(os.path.join(self.window_path, ".config"), "w+") as CPH:
 			self.config.write(CPH)
 
-	def __select_from_window(self):
-		window = self.window_sets.iloc[self.wid,:]
+	@staticmethod
+	def parallelizable_select_from_window(db_path, out_path, window_path,
+		oligos, window_sets, wid,
+		Rs, Rt, Ot, N, D, Tr, Ps, Ph):
+		logFormatter = logging.Formatter(Loggable.defaultfmt,
+			datefmt = Loggable.datefmt)
+		logger = logging.getLogger(f"ifpd2-window-{wid}")
+		logger.setLevel(logging.DEBUG)
+		logger = Loggable(logger)
+		logPath = "{0}/{1}.log".format(window_path, "window")
+		logger.addFileHandler(logPath)
+		logger.log.info(f"This log is saved at '{logPath}'.")
+
+		self = OligoWalker(db_path, logger.log)
+		self.out_path = out_path
+		self.__current_oligos = oligos
+		self._window_sets = window_sets
+		self._w = wid
+		self.Rs = Rs
+		self.Rt = Rt
+		self.Ot = Ot
+		self.N = N
+		self.D = D
+		self.Tr = Tr
+		self.Ps = Ps
+		self.Ph = Ph
+		self._assert()
+
+		output = self.select_from_window()
+		window_tag = "%d.%d" % (
+			self.current_window['s'], self.current_window['w'])
+
+		logger.getLogger("ifpd2-main").log.info(
+			f"Received output for window {window_tag}.")
+
+		return output
+
+	def select_from_window(self, *args):
+		window = self.current_window
 		window_tag = f"{int(window['s'])}.{int(window['w'])}"
 		window_range = f"[{int(window['start'])}:{int(window['end'])}]"
-
-		self.addFileHandler(os.path.join(self.window_path, "window.log"))
 
 		if len(self.current_oligos) >= self.N:
 			oGroup = OligoGroup(self.current_oligos, self.log)
@@ -720,8 +782,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		if not int(window['s']) in self.probe_candidates.keys():
 			self.probe_candidates[int(window['s'])] = {}
 
-		self.probe_candidates[int(window['s'])][int(window['w'])] = probe_list
-		return
+		return (int(window['s']), int(window['w']), probe_list)
 
 	def __export_probes(self, probe_list):
 		probe_df = pd.concat([op.featDF for op in probe_list],
@@ -856,7 +917,7 @@ class OligoGroup(Loggable):
 	_oligos_in_focus_window = None
 	_oligos_passing_score_filter = None
 
-	def __init__(self, oligos, logger = logging.getLogger):
+	def __init__(self, oligos, logger = logging.getLogger().log):
 		super(OligoGroup, self).__init__(logger)
 		self._data = pd.concat([o.data for o in oligos], ignore_index = True)
 		self._data = self._data.loc[self._data['score'] <= 1, :]
@@ -1195,9 +1256,9 @@ else:
 	if not os.path.isdir(out_path):
 		os.mkdir(out_path)
 
-logFormatter = logging.Formatter('%(asctime)s %(levelname)s:\t%(message)s',
-	datefmt='%d/%m/%Y %I:%M:%S')
-logger = logging.getLogger()
+logFormatter = logging.Formatter(Loggable.defaultfmt,
+	datefmt = Loggable.datefmt)
+logger = logging.getLogger("ifpd2-main")
 logger.setLevel(logging.DEBUG)
 
 consoleHandler = logging.StreamHandler()
