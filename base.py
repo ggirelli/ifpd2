@@ -906,77 +906,37 @@ class OligoGroup(Loggable):
 	def discard_focused_oligos_safeN(self, safeN, D):
 		# Discard focused oligos that are neither the first nor the last safeN
 		
-		start_thr = self.data.loc[self.oligos_in_focus_window,"start"].min()
-		end_thr = self.data.loc[self.oligos_in_focus_window,"end"].max()
+		start_thr = self.data.loc[self.oligos_in_focus_window,"start"
+			].values[0] + len(self.data.loc[self.oligos_in_focus_window,"seq"
+			].values[0]) + D
+		end_thr = self.data.loc[self.oligos_in_focus_window,"end"
+			].values[-1] + len(self.data.loc[self.oligos_in_focus_window,"seq"
+			].values[-1]) + D
 
-		c = 0
-		oid = 0
-		while c <= safeN and oid < self.data.shape[0]:
-			oStart = self.data.iloc[oid]['start']
-			if oStart < start_thr:
-				oid += 1
-				continue
-			else:
-				c += 1
-				start_thr = oStart+len(self.data.iloc[oid]['seq'])+D
-			oid += 1
+		oData = self.get_focused_oligos()
 
-		c = 0
-		oid = self.data.shape[0]-1
-		while c <= safeN and oid >= 0:
-			oEnd = self.data.iloc[oid]['end']
-			if oEnd > end_thr:
-				oid -= 1
-				continue
-			else:
-				c += 1
-				end_thr = oEnd-len(self.data.iloc[oid]['seq'])-D+1
-			oid -= 1
+		c = 1
+		while c <= safeN:
+			passing_oData = oData.loc[oData['start'] > start_thr]
+			if 0 == passing_oData.shape[0]:
+				self.log.info("Not enoug oligos, skipped discard step.")
+				return
+			start_thr = passing_oData['start'].values[0] + len(
+				passing_oData['seq'].values[0]) + D
+			c += 1
+
+		c = 1
+		while c <= safeN:
+			passing_oData = oData.loc[oData['end'] <= start_thr]
+			if 0 == passing_oData.shape[-1]:
+				self.log.info("Not enoug oligos, skipped discard step.")
+				return
+			end_thr = passing_oData['end'].values[-1] - len(
+				passing_oData['seq'].values[-1]) - D
+			c += 1
 
 		if not self.__discard_oligos_in_range(start_thr, end_thr):
 			self.log.info("No oligos to be discarded.")
-
-		# thr = self.data.loc[self.oligos_in_focus_window, "end"].values[0] + D+1
-		# keep_from_start = []
-		# c = 1
-		# for oid in range(self.data.shape[0]):
-		# 	if not self.oligos_in_focus_window[oid]:
-		# 		keep_from_start.append(True)
-		# 	oligo = self.data.iloc[oid, :]
-		# 	if oligo['start'] < thr:
-		# 		keep_from_start.append(True)
-		# 	else:
-		# 		if c == safeN:
-		# 			keep_from_start.append(False)
-		# 		else:
-		# 			c += 1
-		# 			thr = self.data.iloc[oid, :]["end"] + D+1
-		# 			keep_from_start.append(True)
-
-		# thr = self.data.loc[self.oligos_in_focus_window, "start"].values[-1]+D
-		# keep_from_end = []
-		# c = 1
-		# for oid in range(self.data.shape[0]):
-		# 	if not self.oligos_in_focus_window[oid]:
-		# 		keep_from_end.append(True)
-		# 	oligo = self.data.iloc[oid, :]
-		# 	if oligo['end'] >= thr:
-		# 		keep_from_end.append(True)
-		# 	else:
-		# 		if c == safeN:
-		# 			keep_from_end.append(False)
-		# 		else:
-		# 			c += 1
-		# 			thr = self.data.iloc[oid, :]["start"] + D
-		# 			keep_from_end.append(True)
-
-		# keep_condition = np.logical_or(keep_from_start, keep_from_end)
-		# if all(keep_condition):
-		# 	self.log.info("No oligos to be discarded.")
-		# 	return
-		# nDiscarded = self.oligos_in_focus_window.sum()-keep_condition.sum()
-		# self.log.info(f"Discarded {nDiscarded} oligos (safeN = {safeN}).")
-		# self.__apply_keep_condition(keep_condition)
 
 	def __discard_oligos_in_range(self, start, end):
 		if start >= end: return False
