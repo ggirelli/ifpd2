@@ -906,10 +906,10 @@ class OligoGroup(Loggable):
 	def discard_focused_oligos_safeN(self, safeN, D):
 		# Discard focused oligos that are neither the first nor the last safeN
 		
-		start_thr = self.data.loc[self.oligos_in_focus_window,"start"
+		start = self.data.loc[self.oligos_in_focus_window,"start"
 			].values[0] + len(self.data.loc[self.oligos_in_focus_window,"seq"
 			].values[0]) + D
-		end_thr = self.data.loc[self.oligos_in_focus_window,"end"
+		end = self.data.loc[self.oligos_in_focus_window,"end"
 			].values[-1] + len(self.data.loc[self.oligos_in_focus_window,"seq"
 			].values[-1]) + D
 
@@ -917,26 +917,26 @@ class OligoGroup(Loggable):
 
 		c = 1
 		while c <= safeN:
-			passing_oData = oData.loc[oData['start'] > start_thr]
+			passing_oData = oData.loc[oData['start'] > start]
 			if 0 == passing_oData.shape[0]:
-				self.log.info("Not enoug oligos, skipped discard step.")
+				self.log.info("Not enough oligos, skipped discard step.")
 				return
-			start_thr = passing_oData['start'].values[0] + len(
+			start = passing_oData['start'].values[0] + len(
 				passing_oData['seq'].values[0]) + D
 			c += 1
 
 		c = 1
 		while c <= safeN:
-			passing_oData = oData.loc[oData['end'] <= start_thr]
+			passing_oData = oData.loc[oData['end'] <= start]
 			if 0 == passing_oData.shape[-1]:
-				self.log.info("Not enoug oligos, skipped discard step.")
+				self.log.info("Not enough oligos, skipped discard step.")
 				return
-			end_thr = passing_oData['end'].values[-1] - len(
+			end = passing_oData['end'].values[-1] - len(
 				passing_oData['seq'].values[-1]) - D
 			c += 1
 
-		if not self.__discard_oligos_in_range(start_thr, end_thr):
-			self.log.info("No oligos to be discarded.")
+		if not self.__discard_oligos_in_range(start, end):
+			self.log.info("No oligos to be discarded in range [{start}:{end}).")
 
 	def __discard_oligos_in_range(self, start, end):
 		if start >= end: return False
