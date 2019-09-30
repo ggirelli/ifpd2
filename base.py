@@ -187,15 +187,15 @@ class OligoProbeBuilder(Loggable):
 		probe_size = pData['end'].values[-1]
 		probe_size -= pData['start'].values[0]
 		if self.Ps < probe_size:
-			return False
+			return (False, 'S')
 		dData = pData['start'].values[1:] - pData['end'].values[:-1]
 		max_hole_size = dData.max()
 		if self.Ph * probe_size < max_hole_size:
-			return False
+			return (False, 'H')
 		Tm_range = pData['Tm'].max()-pData['Tm'].min()
 		if 2*self.Tr < Tm_range:
-			return False
-		return True
+			return (False, 'T')
+		return (True, 'P')
 
 	def filter_paths(self, path_set, oData):
 		# Selects oligo paths based on length, melting temperature, size, and
@@ -203,22 +203,27 @@ class OligoProbeBuilder(Loggable):
 		assert_type(oData, pd.DataFrame, "oData")
 
 		selected_paths = set()
+		exit_polls = {'P':0, 'N':0, 'S':0, 'T':0, 'H':0}
 		for path in list(path_set):
+			if path in selected_paths: continue
 			if self.N > len(path):
-				continue
-			if path in selected_paths:
+				exit_polls['N'] = exit_polls['N'] + 1
 				continue
 			if self.N == len(path):
-				if not self.__path_passes(path, oData):
-					continue
+				passed, comment = self.__path_passes(path, oData)
+				exit_polls[comment] = exit_polls[comment] + 1
+				if not passed: continue
 				selected_paths.add(path)
 			else:
 				for j in range(len(path) - self.N + 1):
 					subpath = path[j:(j + self.N)]
-					if not self.__path_passes(subpath, oData):
-						continue
+					passed, comment = self.__path_passes(subpath, oData)
+					exit_polls[comment] = exit_polls[comment] + 1
+					if not passed: continue
 					selected_paths.add(subpath)
-		return list(selected_paths)
+		
+		comment = "".join([f"{r}{c}" for (c,r) in exit_polls.items()])
+		return (list(selected_paths), comment)
 
 	@staticmethod
 	def convert_paths_to_probes(path_list, oData):
@@ -766,10 +771,10 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			self.log.info(f"Found {nPaths} sets with up to {pathMaxLen} " +
 				f"non-overlapping oligos.")
 
-		paths = self.filter_paths(paths, oData)
+		paths, comment = self.filter_paths(paths, oData)
 		if verbosity:
 			self.log.info(f"{len(paths)}/{nPaths} oligo paths remaining " +
-				"after filtering.")
+				f"after filtering. ({comment})")
 
 		return self.convert_paths_to_probes(paths, oData)
 
