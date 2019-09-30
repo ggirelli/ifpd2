@@ -180,46 +180,44 @@ class OligoProbeBuilder(Loggable):
 
 		return path_set
 
+	def __path_passes(self, path, oData):
+		pData = oData.iloc[path, :]
+		probe_size = pData['end'].values[-1]
+		probe_size -= pData['start'].values[0]
+		if self.Ps < probe_size:
+			return False
+		dData = pData['start'].values[1:] - pData['end'].values[:-1]
+		max_hole_size = dData.max()
+		if self.Ph * probe_size < max_hole_size:
+			return False
+		Tm_range = pData['Tm'].max()-pData['Tm'].min()
+		if 2*self.Tr < Tm_range:
+			return False
+		return True
+
 	def filter_paths(self, path_set, oData):
 		# Selects oligo paths based on length, melting temperature, size, and
 		# presence of gaps.
 		assert_type(oData, pd.DataFrame, "oData")
-		selected_paths = []
+
+		selected_paths = set()
 		for path in list(path_set):
+			if path in selected_paths:
+				continue
 			path = list(path)
 			if self.N > len(path):
 				continue
 			elif self.N == len(path):
-				pData = oData.iloc[path, :]
-				probe_size = pData['end'].values[-1]
-				probe_size -= pData['start'].values[0]
-				if self.Ps < probe_size:
+				if not self.__path_passes(path, oData):
 					continue
-				dData = pData['start'].values[1:] - pData['end'].values[:-1]
-				max_hole_size = dData.max()
-				if self.Ph * probe_size < max_hole_size:
-					continue
-				Tm_range = pData['Tm'].max()-pData['Tm'].min()
-				if 2*self.Tr < Tm_range:
-					continue
-				selected_paths.append(tuple(path))
+				selected_paths.add(tuple(path))
 			else:
 				for j in range(len(path) - self.N + 1):
 					subpath = path[j:(j + self.N)]
-					pData = oData.iloc[subpath, :]
-					probe_size = pData['end'].values[-1]
-					probe_size -= pData['start'].values[0]
-					if self.Ps < probe_size:
+					if not self.__path_passes(subpath, oData):
 						continue
-					dData = pData['start'].values[1:] - pData['end'].values[:-1]
-					max_hole_size = dData.max()
-					if self.Ph * probe_size < max_hole_size:
-						continue
-					Tm_range = pData['Tm'].max()-pData['Tm'].min()
-					if 2*self.Tr < Tm_range:
-						continue
-					selected_paths.append(tuple(subpath))
-		return selected_paths
+					selected_paths.add(tuple(subpath))
+		return list(selected_paths)
 
 	@staticmethod
 	def convert_paths_to_probes(path_list, oData):
@@ -242,7 +240,7 @@ class OligoProbeBuilder(Loggable):
 		probe_ref = sorted_probes[0]
 		for probe in sorted_probes[1:-1]:
 			n_shared_oligos = probe_ref.count_shared_oligos(probe)
-			if probe_ref.n_oligos == n_shared_oligos:							# THIS SHOULD NOT HAPPEN!!!!
+			if probe_ref.n_oligos == n_shared_oligos:
 				self.log.critical("Encountered probe duplicates!")
 				continue
 			if thr * self.N <= n_shared_oligos:
