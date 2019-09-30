@@ -181,6 +181,7 @@ class OligoProbeBuilder(Loggable):
 		return path_set
 
 	def __path_passes(self, path, oData):
+		if not isinstance(path, list): path = list(path)
 		pData = oData.iloc[path, :]
 		probe_size = pData['end'].values[-1]
 		probe_size -= pData['start'].values[0]
@@ -204,19 +205,18 @@ class OligoProbeBuilder(Loggable):
 		for path in list(path_set):
 			if path in selected_paths:
 				continue
-			path = list(path)
 			if self.N > len(path):
 				continue
 			elif self.N == len(path):
 				if not self.__path_passes(path, oData):
 					continue
-				selected_paths.add(tuple(path))
+				selected_paths.add(path)
 			else:
 				for j in range(len(path) - self.N + 1):
 					subpath = path[j:(j + self.N)]
 					if not self.__path_passes(subpath, oData):
 						continue
-					selected_paths.add(tuple(subpath))
+					selected_paths.add(subpath)
 		return list(selected_paths)
 
 	@staticmethod
@@ -235,6 +235,8 @@ class OligoProbeBuilder(Loggable):
 		return OligoProbe(oData.iloc[list(path), :])
 
 	def reduce_probe_list(self, probe_list, thr):
+		if 0 == len(probe_list):
+			return []
 		sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
 		selected_probes = []
 		probe_ref = sorted_probes[0]
@@ -716,8 +718,6 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			while 0 == len(probe_list):
 				oGroup.reset_threshold()
 				if oGroup.focus_window_size >= self.Ps:
-					#oGroup.discard_focused_oligos_safeDist(
-					#	(self.N-1)*(self.k+self.D))
 					oGroup.discard_focused_oligos_safeN(self.N-1, self.D)
 				if not oGroup.expand_focus_by_step(self.Rt):
 					break
@@ -734,10 +734,12 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			pathMaxLen = np.max([len(p) for p in list(paths)])
 			self.log.info(f"Found {nPaths} sets with up to {pathMaxLen} " +
 				f"non-overlapping oligos.")
+
 		paths = self.filter_paths(paths, oData)
 		if verbosity:
 			self.log.info(f"{len(paths)}/{nPaths} oligo paths remaining " +
 				"after filtering.")
+
 		return self.convert_paths_to_probes(paths, oData)
 
 	def __explore_filter(self, oGroup):
