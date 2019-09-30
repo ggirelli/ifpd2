@@ -236,6 +236,43 @@ class OligoProbeBuilder(Loggable):
 		# Convert an oligo path into an OligoProbe
 		return OligoProbe(oData.iloc[list(path), :])
 
+	def reduce_probe_list(self, probe_list, thr):
+		sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
+		selected_probes = []
+		probe_ref = sorted_probes[0]
+		for probe in sorted_probes[1:-1]:
+			n_shared_oligos = probe_ref.count_shared_oligos(probe)
+			if probe_ref.n_oligos == n_shared_oligos:							# THIS SHOULD NOT HAPPEN!!!!
+				self.log.critical("Encountered probe duplicates!")
+				continue
+			if thr * self.N <= n_shared_oligos:
+				probe_ref = self.select_probe_from_pair(probe_ref, probe)
+			else:
+				selected_probes.append(probe_ref)
+				probe_ref = probe
+		if not probe_ref in selected_probes:
+			selected_probes.append(probe_ref)
+		if thr * self.N > probe_ref.count_shared_oligos(sorted_probes[-1]):
+			selected_probes.append(sorted_probes[-1])
+		self.log.info(f"Reduced {len(probe_list)} to " +
+			f"{len(selected_probes)} probes.")
+		return selected_probes
+
+	def select_probe_from_pair(self, probeA, probeB):
+		if probeA.size < probeB.size:
+			return probeA
+		else:
+			return probeB
+		if probeA.tm_range < probeB.tm_range:
+			return probeA
+		else:
+			return probeB
+		if probeA.spread/probeA.d_mean < probeB.spread/probeB.d_mean:
+			return probeA
+		else:
+			return probeB
+		return probeA
+
 class GenomicWindowSet(object):
 	"""Genomic window manager."""
 
@@ -628,6 +665,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			self.log.info(f"Retrieved {oGroup.data.shape[0]} oligos for" +
 				f" window {window_tag} {window_range}")
 			probe_list = self.__build_probe_candidates(oGroup)
+			probe_list = self.reduce_probe_list(probe_list, .5)
 		else:
 			self.log.warning(f"Window {window_tag} does not have enough" +
 				f" oligos {len(self.current_oligos)}/{self.N}, skipped.")
@@ -968,7 +1006,7 @@ class OligoGroup(Loggable):
 			c += 1
 
 		if not self.__discard_oligos_in_range(start, end):
-			self.log.info("No oligos to be discarded in range [{start}:{end}).")
+			self.log.info(f"No oligos to discard in range [{start}:{end}).")
 
 	def __discard_oligos_in_range(self, start, end):
 		if start >= end: return False
@@ -1014,6 +1052,14 @@ class OligoProbe(object):
 		self._tm_range = self._data['Tm'].max() - self._data['Tm'].min()
 
 	@property
+	def n_oligos(self):
+		return self._data.shape[0]
+
+	@property
+	def path(self):
+		return self._data.index
+
+	@property
 	def range(self):
 		return self._range
 
@@ -1039,7 +1085,7 @@ class OligoProbe(object):
 
 	@property
 	def featDF(self):
-		df = pd.DataFrame([self.range[0], self.range[1], self._data.shape[0],
+		df = pd.DataFrame([self.range[0], self.range[1], self.n_oligos,
 			self.size, self.spread,
 			self.d_range[0], self.d_range[1], self.d_mean,
 			self.tm_range]).transpose()
@@ -1051,6 +1097,11 @@ class OligoProbe(object):
 		rep  = f"<OligoProbe[{self.range[0]}:{self.range[1]}"
 		rep += f":{self.size}:{self.spread}]>"
 		return rep
+
+	def count_shared_oligos(self, probe):
+		# Counts oligos shared with another probe
+		# based on their paths
+		return np.intersect1d(self.path, probe.path).shape[0]
 
 class OligoProbeSet(object):
 	"""docstring for OligoProbeSet"""
