@@ -16,6 +16,7 @@ reuse = True
 
 # DEPENDENCIES =================================================================
 
+import configparser as cp
 import logging
 import numpy as np
 import os
@@ -442,6 +443,34 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		return os.path.join(self.window_set_path,
 			f"window_{int(self.current_window['w'])}")
 
+	@property
+	def config(self):
+		config = cp.ConfigParser()
+		config['AIM'] = {
+			'Region' : f"{self.C}:{self.S}-{self.E}",
+			'Probe(s) number' : self.X,
+			'Oligo(s) number' : self.N,
+			'Oligo length (nt)' : self.k
+		}
+		config['WINDOWS'] = {
+			'Window size' : self.Ws,
+			'Window step' : self.Wh,
+			'Focus region size' :  self.Rs,
+			'Focus region step' : self.Rt
+		}
+		config['OLIGO FILTERS'] = {
+			'Off-target threshold' : self.F,
+			'Secondary structure dG threshold' : self.Gs,
+			'Oligo score relaxation step' : self.Ot
+		}
+		config['PROBE FILTERS'] = {
+			'Melting temperature range (degC)' : self.Tr,
+			'Min. consecutive oligo distance (nt)' : self.D,
+			'Probe size threshold' : self.Ps,
+			'Maximum hole size' : self.Ph
+		}
+		return config
+
 	def _assert(self):
 		OligoProbeBuilder._assert(self)
 		GenomicWindowSet._assert(self)
@@ -649,6 +678,8 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 
 		window.to_csv(os.path.join(self.window_path, "window.tsv"),
 			sep = "\t", index = True)
+		with open(os.path.join(self.window_path, ".config"), "w+") as CPH:
+			self.config.write(CPH)
 
 	def __select_from_window(self):
 		window = self.window_sets.iloc[self.wid,:]
