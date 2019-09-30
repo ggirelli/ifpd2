@@ -202,25 +202,28 @@ class OligoProbeBuilder(Loggable):
 		# presence of gaps.
 		assert_type(oData, pd.DataFrame, "oData")
 
-		selected_paths = set()
 		exit_polls = {'P':0, 'N':0, 'S':0, 'H':0, 'T':0}
+		
+		sized_paths = set()
 		for path in list(path_set):
-			if path in selected_paths: continue
+			if path in sized_paths: continue
 			if self.N > len(path):
 				exit_polls['N'] = exit_polls['N'] + 1
 				continue
 			if self.N == len(path):
-				passed, comment = self.__path_passes(path, oData)
-				exit_polls[comment] = exit_polls[comment] + 1
-				if not passed: continue
-				selected_paths.add(path)
+				sized_paths.add(path)
 			else:
 				for j in range(len(path) - self.N + 1):
 					subpath = path[j:(j + self.N)]
-					passed, comment = self.__path_passes(subpath, oData)
-					exit_polls[comment] = exit_polls[comment] + 1
-					if not passed: continue
-					selected_paths.add(subpath)
+					sized_paths.add(subpath)
+
+		selected_paths = set()
+		for path in list(sized_paths):
+			if path in selected_paths: continue
+			passed, comment = self.__path_passes(path, oData)
+			exit_polls[comment] = exit_polls[comment] + 1
+			if not passed: continue
+			selected_paths.add(path)
 		
 		comment = "".join([f"{r}{c}" for (c,r) in exit_polls.items()])
 		return (list(selected_paths), comment)
