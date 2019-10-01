@@ -10,7 +10,7 @@
 
 # PARAMETERS ===================================================================
 
-out_path = "/mnt/data/COOLFISH/ifpd2_out/test"
+out_path = "/mnt/data/COOLFISH/ifpd2_out/test2"
 db_path = "/mnt/data/COOLFISH/mm10_chr18_selected_regions.tsv"
 reuse = True
 
@@ -35,7 +35,7 @@ class Loggable(object):
 	defaultfmt = '%(asctime)s %(levelname)s:\t%(message)s'
 	datefmt = '%d/%m/%Y %H:%M:%S'
 
-	def __init__(self, logger = logging.getLogger().log,
+	def __init__(self, logger = logging.getLogger(),
 		formatter = logging.Formatter('%(asctime)s %(levelname)s:\t%(message)s',
 			datefmt = '%d/%m/%Y %H:%M:%S')):
 		super(Loggable, self).__init__()
@@ -120,7 +120,7 @@ class OligoProbeBuilder(Loggable):
 	Ps = int(10000)		# Probe size threshold, in nt (Ps > 1)
 	Ph = .1				# Maximum hole size in probe as fraction of probe size
 
-	def __init__(self, logger = logging.getLogger().log):
+	def __init__(self, logger = logging.getLogger()):
 		super(OligoProbeBuilder, self).__init__(logger)
 
 	def _assert(self):
@@ -430,7 +430,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 	__current_oligos = []
 	__probe_candidates = {}
 
-	def __init__(self, db_path, logger = logging.getLogger().log):
+	def __init__(self, db_path, logger = logging.getLogger()):
 		OligoProbeBuilder.__init__(self, logger)
 		GenomicWindowSet.__init__(self)
 		self.db_path = db_path
@@ -603,9 +603,6 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 						self.Rs, self.Rt, self.Ot,
 						self.N, self.D, self.Tr, self.Ps, self.Ph
 					)))
-					self.log.info(f"Window {int(self.current_window['s'])}." +
-						f"{int(self.current_window['w'])} " +
-						"sent to processor pool.")
 
 					if self.reached_last_window:
 						break
@@ -922,7 +919,7 @@ class OligoGroup(Loggable):
 	_oligos_in_focus_window = None
 	_oligos_passing_score_filter = None
 
-	def __init__(self, oligos, logger = logging.getLogger().log):
+	def __init__(self, oligos, logger = logging.getLogger()):
 		super(OligoGroup, self).__init__(logger)
 		self._data = pd.concat([o.data for o in oligos], ignore_index = True)
 		self._data = self._data.loc[self._data['score'] <= 1, :]
