@@ -576,6 +576,8 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		s += f"Minimum distance between consecutive oligos in a probe"
 		s += f" set at {self.D} nt.\n"
 		s += f"Probe size threshold set at {self.Ps} nt.\n"
+		s += f"Reducing probes when oligo intersection fraction is equal to"
+		s += f" or greater than {self.Po}.\n"
 
 		self.log.info(s)
 
