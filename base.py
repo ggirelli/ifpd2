@@ -580,7 +580,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		self.__preprocess_window()
 		self.__load_windows_until_next_to_do()
 
-		if self.reached_last_window and self.__window_done:
+		if self.reached_last_window and self.__window_done():
 			self.log.info("All windows pre-processed. Skipped database walk.")
 			return
 
