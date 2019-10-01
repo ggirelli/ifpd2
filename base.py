@@ -924,9 +924,31 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		return(probe_list)
 
 	def __build_probe_set_candidates(self):
-		for (wSet, windows) in self.probe_candidates.items():
-			nProbes = [len(probes) for probes in windows.values()]
-			self.log.info(f"{nProbes} probe candidates from window set #{wSet+1}")
+		nProbes = []
+		probe_set_candidates = []
+		for (wSet, window_list) in self.probe_candidates.items():
+			probe_set_list = [(p,) for p in list(window_list.values())[0]]
+
+			for w in list(window_list.values())[1:]:
+				if 0 == len(w): continue
+
+				current_probe_set_list = list(tuple(probe_set_list))
+				probe_set_list = []
+
+				for probe in w:
+					for probe_set in current_probe_set_list:
+						current_probe_set = list(probe_set)
+						current_probe_set.append(probe)
+						probe_set_list.append(current_probe_set)
+
+			probe_set_candidates.extend(probe_set_list)
+			self.log.info(f"Built {len(probe_set_list)} probe set candidates " +
+				f"from window set #{wSet+1}")
+
+		probe_set_candidates = [OligoProbeSet(ps)
+			for ps in probe_set_candidates]
+		self.log.info(f"Built {len(probe_set_candidates)} " +
+			"probe set candidates in total.")
 
 class OligoGroup(Loggable):
 	"""Allows to select oligos from a group based on a "focus" window of
@@ -1241,6 +1263,12 @@ class OligoProbeSet(object):
 	@property
 	def probe_list(self):
 		return self._probe_list
+
+	@probe_list.setter
+	def probe_list(self, probe_list):
+		assert all([isinstance(p, OligoProbe) for p in probe_list])
+		self._probe_list = probe_list
+	
 
 # FUNCTIONS ====================================================================
 
