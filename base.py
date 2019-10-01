@@ -932,7 +932,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 
 	def __build_probe_set_candidates(self):
 		probeSet_path = os.path.join(self.out_path, "probe_sets")
-		if os.path.isdir(probeSet_path)
+		if os.path.isdir(probeSet_path):
 			shutil.rmtree(probeSet_path)
 		os.mkdir(probeSet_path)
 
