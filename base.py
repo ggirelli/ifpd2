@@ -10,7 +10,7 @@
 
 # PARAMETERS ===================================================================
 
-out_path = "/mnt/data/COOLFISH/ifpd2_out/test2"
+out_path = "/mnt/data/COOLFISH/ifpd2_out/test3"
 db_path = "/mnt/data/COOLFISH/mm10_chr18_selected_regions.tsv"
 reuse = True
 
@@ -18,6 +18,7 @@ reuse = True
 
 import configparser as cp
 import copy
+import itertools
 import logging
 import multiprocessing as mp
 import numpy as np
@@ -280,7 +281,7 @@ class OligoProbeBuilder(Loggable):
 			return probeA
 		else:
 			return probeB
-		if probeA.tm_range < probeB.tm_range:
+		if np.diff(probeA.tm_range)[0] < np.diff(probeB.tm_range)[0]:
 			return probeA
 		else:
 			return probeB
@@ -332,7 +333,9 @@ class GenomicWindowSet(object):
 
 	def _init_windows(self):
 		# Build windows and central focus regions (CFR)
-		
+		if not os.path.isdir(os.path.join(self.out_path, "window_sets")):
+			os.mkdir(os.path.join(self.out_path, "window_sets"))
+
 		if isinstance(self.X, int):
 			self.Ws = np.floor((self.E-self.S)/(self.X+1)).astype("i")
 
@@ -452,7 +455,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 
 	@property
 	def window_set_path(self):
-		return os.path.join(self.out_path,
+		return os.path.join(self.out_path, "window_sets",
 			f"set_{int(self.current_window['s'])}")
 
 	@property
@@ -770,6 +773,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		if 0 == len(output[2]):
 			mainLogger.critical("Processor pool returned 0 probe candidates " +
 				f"for window {self.window_tag}.")
+			return []
 
 		mainLogger.info(f"Processor pool returned window {self.window_tag}.")
 
@@ -924,10 +928,17 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		return(probe_list)
 
 	def __build_probe_set_candidates(self):
+		probeSet_path = os.path.join(self.out_path, "probe_sets")
+		if os.path.isdir(probeSet_path)
+			shutil.rmtree(probeSet_path)
+		os.mkdir(probeSet_path)
+
 		nProbes = []
 		probe_set_candidates = []
 		for (wSet, window_list) in self.probe_candidates.items():
 			probe_set_list = [(p,) for p in list(window_list.values())[0]]
+			#nProbes = [len(probes) for probes in window_list.values()]
+			#nProbeSets = np.sum([n for n in nProbes if 0 != n])
 
 			for w in list(window_list.values())[1:]:
 				if 0 == len(w): continue
@@ -949,6 +960,10 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			for ps in probe_set_candidates]
 		self.log.info(f"Built {len(probe_set_candidates)} " +
 			"probe set candidates in total.")
+
+		pd.concat([ps.featDF for ps in probe_set_candidates]
+			).reset_index(drop = True).to_csv(
+			os.path.join(probeSet_path, "probe_set_candidates.tsv"), "\t")
 
 class OligoGroup(Loggable):
 	"""Allows to select oligos from a group based on a "focus" window of
@@ -1199,7 +1214,7 @@ class OligoProbe(object):
 		self._spread = np.std(oDists)
 		self._d_range = (oDists.min(), oDists.max())
 		self._d_mean = oDists.mean()
-		self._tm_range = self._data['Tm'].max() - self._data['Tm'].min()
+		self._tm_range = (self._data['Tm'].min(), self._data['Tm'].max())
 
 	@property
 	def n_oligos(self):
@@ -1216,7 +1231,7 @@ class OligoProbe(object):
 	@property
 	def tm_range(self):
 		return self._tm_range
-	
+
 	@property
 	def d_range(self):
 		return self._d_range
@@ -1238,7 +1253,7 @@ class OligoProbe(object):
 		df = pd.DataFrame([self.range[0], self.range[1], self.n_oligos,
 			self.size, self.spread,
 			self.d_range[0], self.d_range[1], self.d_mean,
-			self.tm_range]).transpose()
+			np.diff(self.tm_range)[0]]).transpose()
 		df.columns = ["start", "end", "nOligos", "size",
 			"spread", "d_min", "d_max", "d_mean", "tm_range"]
 		return df
@@ -1267,7 +1282,87 @@ class OligoProbeSet(object):
 	@probe_list.setter
 	def probe_list(self, probe_list):
 		assert all([isinstance(p, OligoProbe) for p in probe_list])
-		self._probe_list = probe_list
+		self._probe_list = sorted(probe_list, key = lambda p: p.range[0])
+		self._probe_tm_ranges = [p.tm_range for p in self.probe_list]
+		self._tm_range = (np.min([t[0] for t in self._probe_tm_ranges]),
+			np.max([t[1] for t in self._probe_tm_ranges]))
+		self._sizes = [p.size for p in self.probe_list]
+		self._spreads = [p.spread for p in self.probe_list]
+		self._probe_ranges = [p.range for p in self.probe_list]
+		probe_starts = np.array([r[0] for r in self.probe_ranges])
+		probe_ends = np.array([r[1] for r in self.probe_ranges])
+		self._range = (probe_starts.min(), probe_ends.max())
+		self._ds = probe_starts[1:] - probe_ends[:-1]
+		self._d_mean = np.mean(self.ds)
+		self._d_range = (np.min(self.ds), np.max(self.ds))
+		tm = [p.data['Tm'].tolist() for p in self.probe_list]
+		self._oligo_tm = list(itertools.chain(*tm))
+
+	@property
+	def range(self):
+		return self._range
+
+	@property
+	def probe_ranges(self):
+		return self._probe_ranges
+
+	@property
+	def ds(self):
+		return self._ds
+
+	@property
+	def d_mean(self):
+		return self._d_mean
+
+	@property
+	def d_range(self):
+		return self._d_range
+	
+	@property
+	def tm_range(self):
+		return self._tm_range
+
+	@property
+	def probe_tm_ranges(self):
+		return self._probe_tm_ranges
+	
+	@property
+	def oligo_tm(self):
+		return self._oligo_tm
+	
+	@property
+	def sizes(self):
+		return self._sizes
+
+	@property
+	def spreads(self):
+		return self._spreads
+
+	@property
+	def featDF(self):
+		df = pd.DataFrame([self.range[0], self.range[1],
+			len(self.probe_list), np.diff(self.range)[0],
+			np.mean(self.sizes), np.std(self.sizes),
+			np.min(self.spreads), np.max(self.spreads),
+			np.mean(self.spreads), np.std(self.spreads),
+			self.d_range[0], self.d_range[1], self.d_mean, np.std(self.ds),
+			np.diff(self.tm_range)[0],
+			np.mean(self.oligo_tm), np.std(self.oligo_tm),
+			1/3*(np.std(self.sizes)/np.mean(self.sizes) +
+				np.std(self.spreads)/np.mean(self.spreads) +
+				np.std(self.oligo_tm)/np.mean(self.oligo_tm))
+		]).transpose()
+		df.columns = ["start", "end",
+			"nProbes", "size", "size_mean", "size_std",
+			"spread_min", "spread_max", "spread_mean", "spread_std",
+			"d_min", "d_max", "d_mean", "d_std",
+			"tm_range", "tm_mean", "tm_std", "score"]
+		return df
+
+	def export(self, path, name):
+		assert os.path.isdir(path)
+		assert_type(name, str, "name")
+		pass
 	
 
 # FUNCTIONS ====================================================================
