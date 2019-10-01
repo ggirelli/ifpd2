@@ -651,7 +651,10 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		if 1 < self.threads:
 			for promise in probe_data:
 				s, w, probe_candidates = promise.get()
-				self.probe_candidates[s][w] = probe_candidates
+				if s in self.probe_candidates.keys():
+					self.probe_candidates[s][w] = probe_candidates
+				else:
+					self.probe_candidates[s] = {w : probe_candidates}
 
 		DBH.close()
 		pool.close()
