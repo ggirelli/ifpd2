@@ -746,12 +746,15 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		self.Ph = Ph
 		self._assert()
 
-		output = self.select_from_window()
 		window_tag = "%d.%d" % (
 			self.current_window['s'], self.current_window['w'])
+		logging.getLogger("ifpd2-main").info(
+			f"Processor pool received window {window_tag}.")
 
-		logging.getLogger("ifpd2-main").log.info(
-			f"Received output for window {window_tag}.")
+		output = self.select_from_window()
+
+		logging.getLogger("ifpd2-main").info(
+			f"Processor pool returned window {window_tag}.")
 
 		return output
 
