@@ -632,6 +632,11 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			self.r += 1
 		self.log.info(f"Parsed {self.rw}/{self.r} records.")
 
+		if 1 < self.threads:
+			for promise in probe_data:
+				s, w, probe_candidates = promise.get()
+				self.probe_candidates[s][w] = probe_candidates
+
 		DBH.close()
 		pool.close()
 
@@ -748,7 +753,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		window_tag = "%d.%d" % (
 			self.current_window['s'], self.current_window['w'])
 
-		logger.getLogger("ifpd2-main").log.info(
+		logging.getLogger("ifpd2-main").log.info(
 			f"Received output for window {window_tag}.")
 
 		return output
