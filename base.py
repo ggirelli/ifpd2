@@ -458,6 +458,16 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			f"window_{int(self.current_window['w'])}")
 
 	@property
+	def window_tag(self):
+		window = self.current_window
+		return f"{int(window['s'])}.{int(window['w'])}"
+
+	@property
+	def window_range(self):
+		window = self.current_window
+		return f"[{int(window['start'])}:{int(window['end'])}]"
+
+	@property
 	def config(self):
 		config = cp.ConfigParser()
 		config['AIM'] = {
@@ -610,8 +620,9 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 					self.go_to_next_window()
 					self.__preprocess_window()
 					self.__load_windows_until_next_to_do()
-					if self.reached_last_window:
+					if self.reached_last_window and self.__window_done():
 						break
+
 					if 0 != len(self.current_oligos):
 						self.remove_oligos_starting_before(
 							self.current_window['start'])
@@ -654,6 +665,8 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		# Imports output for current window
 		pPath = os.path.join(self.window_path, "probe_paths.tsv")
 		if not os.path.isfile(pPath):
+			self.log.critical("Found 0 probe candidates to load " +
+				f"for window {self.window_tag}.")
 			return []
 		oPath = os.path.join(self.window_path, "oligos.tsv")
 		assert os.path.isfile(oPath)
@@ -661,7 +674,8 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		oligos = pd.read_csv(oPath, "\t", index_col = 0)
 		paths = pd.read_csv(pPath, "\t", index_col = 0)
 
-		self.log.info(f"Loading {paths.shape[0]} probe candidates.")
+		self.log.info(f"Loading {paths.shape[0]} probe candidates " +
+			f"for window {self.window_tag}.")
 
 		probe_list = []
 		for p in paths.iloc[:, 0]:
@@ -674,8 +688,6 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		# Preprocess current window
 		# Triggers import if previously run and matching current window
 		window = self.current_window
-		window_tag = f"{int(window['s'])}.{int(window['w'])}"
-		window_range = f"[{int(window['start'])}:{int(window['end'])}]"
 
 		if not os.path.isdir(self.window_set_path):
 			os.mkdir(self.window_set_path)
@@ -699,7 +711,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 
 				if (win.transpose().values == window.values).all():
 					self.log.info("Re-using previous results for window " +
-						f"{window_tag} {window_range}")
+						f"{self.window_tag} {self.window_range}")
 
 					if not int(window['s']) in self.probe_candidates.keys():
 						self.probe_candidates[int(window['s'])] = {}
@@ -720,8 +732,8 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 
 	@staticmethod
 	def parallelizable_select_from_window(db_path, out_path, window_path,
-		oligos, window_sets, wid,
-		Rs, Rt, Ot, N, D, Tr, Ps, Ph):
+		oligos, window_sets, wid, Rs, Rt, Ot, N, D, Tr, Ps, Ph,
+		main_logger_tag = "ifpd2-main"):
 		logFormatter = logging.Formatter(Loggable.defaultfmt,
 			datefmt = Loggable.datefmt)
 		logger = logging.getLogger(f"ifpd2-window-{wid}")
@@ -746,31 +758,29 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		self.Ph = Ph
 		self._assert()
 
-		window_tag = "%d.%d" % (
-			self.current_window['s'], self.current_window['w'])
-		logging.getLogger("ifpd2-main").info(
-			f"Processor pool received window {window_tag}.")
+		mainLogger = logging.getLogger(main_logger_tag)
+		mainLogger.info(f"Processor pool received window {self.window_tag}.")
 
 		output = self.select_from_window()
+		if 0 == len(output[2]):
+			mainLogger.critical("Processor pool returned 0 probe candidates " +
+				f"for window {self.window_tag}.")
 
-		logging.getLogger("ifpd2-main").info(
-			f"Processor pool returned window {window_tag}.")
+		mainLogger.info(f"Processor pool returned window {self.window_tag}.")
 
 		return output
 
 	def select_from_window(self, *args):
 		window = self.current_window
-		window_tag = f"{int(window['s'])}.{int(window['w'])}"
-		window_range = f"[{int(window['start'])}:{int(window['end'])}]"
 
 		if len(self.current_oligos) >= self.N:
 			oGroup = OligoGroup(self.current_oligos, self.log)
 			self.log.info(f"Retrieved {oGroup.data.shape[0]} oligos for" +
-				f" window {window_tag} {window_range}")
+				f" window {self.window_tag} {self.window_range}")
 			probe_list = self.__build_probe_candidates(oGroup)
 			probe_list = self.reduce_probe_list(probe_list, .5)
 		else:
-			self.log.warning(f"Window {window_tag} does not have enough" +
+			self.log.warning(f"Window {self.window_tag} does not have enough" +
 				f" oligos {len(self.current_oligos)}/{self.N}, skipped.")
 			return
 		
