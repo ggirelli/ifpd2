@@ -119,12 +119,12 @@ class OligoProbeBuilder(Loggable):
 	Tr = 10.0			# Melting temperature range half-width
 	Ps = int(10000)		# Probe size threshold, in nt (Ps > 1)
 	Ph = .1				# Maximum hole size in probe as fraction of probe size
+	Po = .5				# Probe oligo intersection threshold for path reduction
 
 	def __init__(self, logger = logging.getLogger()):
 		super(OligoProbeBuilder, self).__init__(logger)
 
 	def _assert(self):
-
 		assert_type(self.N, int, "N")
 		assert_nonNeg(self.N, "N")
 
@@ -139,6 +139,9 @@ class OligoProbeBuilder(Loggable):
 
 		assert_type(self.Ph, float, "Ph")
 		assert_inInterv(self.Ph, 0, 1, "Ph")
+
+		assert_type(self.Po, float, "Po")
+		assert_inInterv(self.Po, 0, 1, "Po")
 
 	def get_non_overlapping_paths(self, oData):
 		# Gets all paths of N consecutive non-overlapping oligos with minimum
@@ -778,7 +781,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			self.log.info(f"Retrieved {oGroup.data.shape[0]} oligos for" +
 				f" window {self.window_tag} {self.window_range}")
 			probe_list = self.__build_probe_candidates(oGroup)
-			probe_list = self.reduce_probe_list(probe_list, .5)
+			probe_list = self.reduce_probe_list(probe_list, self.Po)
 		else:
 			self.log.warning(f"Window {self.window_tag} does not have enough" +
 				f" oligos {len(self.current_oligos)}/{self.N}, skipped.")
