@@ -115,7 +115,7 @@ class Oligo(object):
 				[tm_dG*f for f in Gs])
 		self.data['score'] = np.mean([norm_nOT, norm_ss_dG])
 
-class OligoPathBuilder(Loggable):
+class OligoPathBuilder(object):
 	"""OligoPathBuilder contains methods to select non-overlapping sets of
 	oligos (i.e., probes) from an oligo DataFrame in input."""
 
@@ -126,8 +126,8 @@ class OligoPathBuilder(Loggable):
 	Ph = .1				# Maximum hole size in probe as fraction of probe size
 	Po = .5				# Probe oligo intersection threshold for path reduction
 
-	def __init__(self, logger = logging.getLogger()):
-		Loggable.__init__(self, logger)
+	def __init__(self):
+		super(OligoPathBuilder, self).__init__()
 
 	def _assert(self):
 		assert_type(self.N, int, "N")
@@ -258,33 +258,34 @@ class OligoPathBuilder(Loggable):
 		return OligoProbe(oData.iloc[list(path), :])
 
 	def reduce_probe_list(self, probe_list, thr):
-		if 0 == len(probe_list): return []
-		sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
+		try:
+			if 0 == len(probe_list): return []
+			sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
 
-		selected_probes = []
-		probe_ref = sorted_probes[0]
-		for probe in sorted_probes[1:-1]:
-			n_shared_oligos = probe_ref.count_shared_oligos(probe)
+			selected_probes = []
+			probe_ref = sorted_probes[0]
+			for probe in sorted_probes[1:-1]:
+				n_shared_oligos = probe_ref.count_shared_oligos(probe)
 
-			if probe_ref.n_oligos == n_shared_oligos:
-				self.log.critical("Encountered probe duplicates!")
-				continue
+				if probe_ref.n_oligos == n_shared_oligos:
+					raise Exception("Encountered probe duplicates!")
 
-			if thr * self.N <= n_shared_oligos:
-				probe_ref = self.select_probe_from_pair(probe_ref, probe)
-			else:
+				if thr * self.N <= n_shared_oligos:
+					probe_ref = self.select_probe_from_pair(probe_ref, probe)
+				else:
+					selected_probes.append(probe_ref)
+					probe_ref = probe
+
+			if not probe_ref in selected_probes:
 				selected_probes.append(probe_ref)
-				probe_ref = probe
 
-		if not probe_ref in selected_probes:
-			selected_probes.append(probe_ref)
+			if thr * self.N > probe_ref.count_shared_oligos(sorted_probes[-1]):
+				selected_probes.append(sorted_probes[-1])
 
-		if thr * self.N > probe_ref.count_shared_oligos(sorted_probes[-1]):
-			selected_probes.append(sorted_probes[-1])
-
-		self.log.info(f"Reduced {len(probe_list)} to " +
-			f"{len(selected_probes)} probes.")
-		return selected_probes
+			return selected_probes
+		except Exception as e:
+			print(e)
+			raise
 
 	def select_probe_from_pair(self, probeA, probeB):
 		if probeA.size < probeB.size:
@@ -311,8 +312,8 @@ class OligoProbeBuilder(OligoPathBuilder):
 						#  (range)
 	Ot = .1				# Step for oligo score relaxation
 
-	def __init__(self, logger = logging.getLogger()):
-		OligoPathBuilder.__init__(self, logger)
+	def __init__(self):
+		super(OligoProbeBuilder, self).__init__()
 
 	def _assert(self):
 		OligoPathBuilder._assert(self)
@@ -343,7 +344,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 		assert_type(self.Ot, float, "Ot")
 		assert 0 < self.Ot and 1 >= self.Ot
 
-	def print_prologue(self):
+	def get_prologue(self):
 		s  = f"* OligoProbeBuilder *\n\n"
 		s += f"Aim to build probes with {self.N} oligos each.\n"
 		s += f"Off-target threshold range set at {self.F}.\n"
@@ -363,13 +364,13 @@ class OligoProbeBuilder(OligoPathBuilder):
 		s += f"Reducing probes when oligo intersection fraction is equal to"
 		s += f" or greater than {self.Po}.\n"
 
-		self.log.info(s)
+		return s
 
-	def start(self, oGroup, window):
+	def start(self, oGroup, window, logger):
 		self._assert()
-		return self.__build_probe_candidates(oGroup, window)
+		return self.__build_probe_candidates(oGroup, window, logger)
 
-	def __build_probe_candidates(self, oGroup, window):
+	def __build_probe_candidates(self, oGroup, window, logger):
 		# Applies oligo filters to the oligo group,
 		# expands the focus group if needed, and build probe candidates
 		
@@ -379,7 +380,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 			oGroup.set_focus_window(window['cfr_start'], window['cfr_end'])
 			oGroup.expand_focus_to_n_oligos(self.N)
 
-		probe_list = self.__explore_filter(oGroup)
+		probe_list = self.__explore_filter(oGroup, logger)
 		if not np.isnan(window['cfr_start']):
 			while 0 == len(probe_list):
 				oGroup.reset_threshold()
@@ -387,19 +388,17 @@ class OligoProbeBuilder(OligoPathBuilder):
 					oGroup.discard_focused_oligos_safeN(self.N-1, self.D)
 				if not oGroup.expand_focus_by_step(self.Rt):
 					break
-				probe_list = self.__explore_filter(oGroup)
-		else:
-			self.log.warning("No CFR expansion, whole window already included.")
+				probe_list = self.__explore_filter(oGroup, logger)
 		
 		return probe_list
 
-	def __explore_filter(self, oGroup):
+	def __explore_filter(self, oGroup, logger):
 		# Explores the 0-to-max_score score threshold range and stops as soon as
 		# one probe candidate passes all user-defined thresholds
 		
 		if oGroup.focus_window_size < self.Ps:
 			max_score = 0
-			self.log.warning("Score relaxation deactivated when focus region" +
+			logger.warning("Score relaxation deactivated when focus region" +
 				" size is smaller than probe size threshold.")
 		else:
 			max_score = 1
@@ -409,7 +408,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 		score_thr = 0
 		oGroup.apply_threshold(score_thr)
 		nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
-		self.log.info(f"Set oligo score threshold at {score_thr:.3f}" +
+		logger.info(f"Set oligo score threshold at {score_thr:.3f}" +
 			f" ({nOligos_prev_score_thr} oligos usable)...")
 
 		if 0 == max_score and 0 == nOligos_prev_score_thr:
@@ -419,7 +418,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 			score_thr += self.Ot
 			oGroup.apply_threshold(score_thr)
 			nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
-			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
+			logger.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
 				f" ({nOligos_prev_score_thr} oligos usable)...")
 
 		probe_list = self.__get_non_overlapping_probes(
@@ -437,13 +436,13 @@ class OligoProbeBuilder(OligoPathBuilder):
 			if 0 == nOligosUsable:
 				continue
 
-			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
+			logger.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
 				f" ({nOligosUsable} oligos usable)...")
 			probe_list = self.__get_non_overlapping_probes(
 				oGroup.get_focused_oligos(True))
 
 			if nOligosUsable == nOligos_in_focus_window:
-				self.log.warning(
+				logger.warning(
 					"All oligos included. Score relaxation ineffective.")
 				break
 			nOligos_prev_score_thr = nOligosUsable
@@ -459,16 +458,16 @@ class OligoProbeBuilder(OligoPathBuilder):
 		pathMaxLen = np.max([len(p) for p in list(paths)])
 		if verbosity:
 			nPaths = len(paths)
-			self.log.info(f"Found {nPaths} sets with up to {pathMaxLen} " +
+			logger.info(f"Found {nPaths} sets with up to {pathMaxLen} " +
 				f"non-overlapping oligos.")
 		if pathMaxLen < self.N:
-			self.log.warning(f"Longest path is shorter than requested. " + 
+			logger.warning(f"Longest path is shorter than requested. " + 
 				"Skipped.")
 			return []
 
 		paths, comment = self.filter_paths(paths, oData)
 		if verbosity:
-			self.log.info(f"{len(paths)}/{nPaths} oligo paths remaining " +
+			logger.info(f"{len(paths)}/{nPaths} oligo paths remaining " +
 				f"after filtering. ({comment})")
 
 		return self.convert_paths_to_probes(paths, oData)
@@ -936,10 +935,21 @@ class OligoWalker(GenomicWindowSet, Loggable):
 	def process_window_parallel(oligos, window, fprocess, fpost, *args,
 		N = 1 , opath = None, loggerName = None, **kwargs):
 		# Wrapper of process_window function, for parallelization
-		mainLogger = logging.getLogger(main_logger_tag)
+
+		logFormatter = logging.Formatter(Loggable.defaultfmt,
+			datefmt = Loggable.datefmt)
+		logger = logging.getLogger(f"ifpd2-window-{wid}")
+		logger.setLevel(logging.DEBUG)
+		logger = Loggable(logger)
+		logPath = "{0}/{1}.log".format(opath, "window")
+		logger.addFileHandler(logPath)
+		logger.log.info(f"This log is saved at '{logPath}'.")
+
+		mainLogger = logging.getLogger(loggerName)
 		mainLogger.info(f"Window {self.window_tag} sent to pool.")
 		results = OligoWalker.process_window(oligos, window,
-			fprocess, fpost, *args, N, opath, loggerName, **kwargs)
+			fprocess, fpost, *args, N, opath,
+			loggerName = f"ifpd2-window-{wid}", **kwargs)
 		mainLogger.info(f"Processor pool returned window {self.window_tag}.")
 		return results
 
@@ -949,21 +959,23 @@ class OligoWalker(GenomicWindowSet, Loggable):
 		# Process oligos from window using fprocess. Then, post-process them
 		# with fopost. Requires at least N oligos to proceeed. If opath is
 		# specified, a ".done" file is touched upon successful postprocessing.
-		mainLogger = logging.getLogger(loggerName)
+		logger = logging.getLogger(loggerName)
 
 		if len(oligos) >= N:
-			oGroup = OligoGroup(oligos, mainLogger)
-			mainLogger.info(f"Retrieved {oGroup.data.shape[0]} oligos for" +
+			oGroup = OligoGroup(oligos, logger)
+			logger.info(f"Retrieved {oGroup.data.shape[0]} oligos for" +
 				f" window {int(window['s'])}.{int(window['w'])} " +
 				f"[{int(window['start'])}:{int(window['end'])}]")
-			results = fprocess(oGroup, window, *args, **kwargs)
+			results = fprocess(oGroup, window,
+				loggerName = loggerName, *args, **kwargs)
 		else:
-			mainLogger.warning(f"Window {int(window['s'])}.{int(window['w'])}" +
+			logger.warning(f"Window {int(window['s'])}.{int(window['w'])}" +
 				" does not have enough oligos " +
 				f"{len(oligos)}/{N}, skipped.")
 			return
 		
-		status, results = fpost(results, opath, *args, **kwargs)		
+		status, results = fpost(results, opath,
+			loggerName = loggerName, *args, **kwargs)		
 		if status and not isinstance(opath, type(None)):
 			Path(os.path.join(opath, ".done")).touch()
 		print(results)
@@ -1396,24 +1408,27 @@ def assert_inInterv(x, vmin, vmax, label, leftClose = False, rightClose = True):
 def fparse(oligo, opb = None, *args, **kwargs):
 	oligo.add_score(opb.F, opb.Gs)
 
-def fprocess(oGroup, window, opb = None, *args, **kwargs):
+def fprocess(oGroup, window, opb = None, loggerName = None, *args, **kwargs):
 	assert isinstance(opb, OligoProbeBuilder)
 	opb = copy.copy(opb)
-	probe_list = opb.start(oGroup, window)
-	probe_list = opb.reduce_probe_list(probe_list, opb.Po)
-	return probe_list
+	logger = logging.getLogger(loggerName)
+	probe_list = opb.start(oGroup, window, logger)
+	reduced_probe_list = opb.reduce_probe_list(probe_list, opb.Po)
+	logger.log.info(f"Reduced from {len(probe_list)} to " +
+		f"{len(reduced_probe_list)} probes.")
+	return reduced_probe_list
 
 def fimport(path, *args, **kwargs):
 	return OligoProbeBuilder.import_probes(path)
 
 def fpost(results, opath, loggerName = None, *args, **kwargs):
-	mainLogger = logging.getLogger(loggerName)
+	logger = logging.getLogger(loggerName)
 	if 0 == len(probe_list):
-		mainLogger.critical(f"Built {len(probe_list)} oligo probe candidates")
-		mainLogger.handlers = mainLogger.handlers[:-1]
+		logger.critical(f"Built {len(probe_list)} oligo probe candidates")
+		logger.handlers = logger.handlers[:-1]
 	else:
-		mainLogger.info(f"Built {len(probe_list)} oligo probe candidates")
-		mainLoggerg.handlers = mainLogger.handlers[:-1]
+		logger.info(f"Built {len(probe_list)} oligo probe candidates")
+		logger.handlers = logger.handlers[:-1]
 		OligoProbeBuilder.export_probes(probe_list, opath)
 
 # RUN ==========================================================================
@@ -1442,8 +1457,8 @@ logger.addFileHandler(logPath)
 
 logger.log.info(f"This log is saved at '{logPath}'.")
 
-opb = OligoProbeBuilder(logger.log)
-opb.print_prologue()
+opb = OligoProbeBuilder()
+logger.log.info(opb.get_prologue())
 
 ow = OligoWalker(db_path, logger.log)
 ow.out_path = out_path
