@@ -149,7 +149,7 @@ class OligoPathBuilder(object):
 		assert_inInterv(self.Po, 0, 1, "Po")
 
 	@staticmethod
-	def get_non_overlapping_paths(self, oData, D):
+	def get_non_overlapping_paths(oData, D):
 		# Gets all paths of consecutive non-overlapping oligos with minimum
 		# distance equal to D
 		assert_type(oData, pd.DataFrame, "oData")
@@ -422,7 +422,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 				f" ({nOligos_prev_score_thr} oligos usable)...")
 
 		probe_list = self.__get_non_overlapping_probes(
-			oGroup.get_focused_oligos(True))
+			oGroup.get_focused_oligos(True), logger)
 		while 0 == len(probe_list):
 			score_thr += self.Ot
 			if score_thr > max_score:
@@ -439,7 +439,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 			logger.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
 				f" ({nOligosUsable} oligos usable)...")
 			probe_list = self.__get_non_overlapping_probes(
-				oGroup.get_focused_oligos(True))
+				oGroup.get_focused_oligos(True), logger)
 
 			if nOligosUsable == nOligos_in_focus_window:
 				logger.warning(
@@ -449,7 +449,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 
 		return(probe_list)
 
-	def __get_non_overlapping_probes(self, oData, verbosity = True):
+	def __get_non_overlapping_probes(self, oData, logger, verbosity = True):
 		# Builds non overlapping oligo paths from an oligo data table, filters
 		# them based on class attributes, and then converts the remaining ones
 		# to OligoProbe objects.
