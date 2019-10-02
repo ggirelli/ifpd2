@@ -366,11 +366,11 @@ class OligoProbeBuilder(OligoPathBuilder):
 
 		return s
 
-	def start(self, oGroup, window, logger):
+	def start(self, oGroup, window, cfr_step, logger):
 		self._assert()
-		return self.__build_probe_candidates(oGroup, window, logger)
+		return self.__build_probe_candidates(oGroup, window, cfr_step, logger)
 
-	def __build_probe_candidates(self, oGroup, window, logger):
+	def __build_probe_candidates(self, oGroup, window, cfr_step, logger):
 		# Applies oligo filters to the oligo group,
 		# expands the focus group if needed, and build probe candidates
 		
@@ -386,7 +386,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 				oGroup.reset_threshold()
 				if oGroup.focus_window_size >= self.Ps:
 					oGroup.discard_focused_oligos_safeN(self.N-1, self.D)
-				if not oGroup.expand_focus_by_step(self.Rt):
+				if not oGroup.expand_focus_by_step(cfr_step):
 					break
 				probe_list = self.__explore_filter(oGroup, logger)
 		
@@ -1412,7 +1412,7 @@ def fprocess(oGroup, window, *args, **kwargs):
 	opb = copy.copy(kwargs['opb'])
 	assert isinstance(opb, OligoProbeBuilder)
 	logger = logging.getLogger(kwargs['loggerName'])
-	probe_list = opb.start(oGroup, window, logger)
+	probe_list = opb.start(oGroup, window, kwargs['cfr_step'], logger)
 	reduced_probe_list = opb.reduce_probe_list(probe_list, opb.Po)
 	logger.log.info(f"Reduced from {len(probe_list)} to " +
 		f"{len(reduced_probe_list)} probes.")
@@ -1463,7 +1463,7 @@ logger.log.info(opb.get_prologue())
 ow = OligoWalker(db_path, logger.log)
 ow.out_path = out_path
 ow.reuse = reuse
-ow.start(fparse, fimport, fprocess, fpost, opb = opb)
+ow.start(fparse, fimport, fprocess, fpost, opb = opb, cfr_step = ow.Rt)
 
 logging.shutdown()
 
