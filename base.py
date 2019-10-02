@@ -318,8 +318,8 @@ class OligoProbeBuilder(OligoPathBuilder):
 	def _assert(self):
 		OligoPathBuilder._assert(self)
 
-		assert_type(k, int, "k")
-		assert_nonNeg(k, "k")
+		assert_type(self.k, int, "k")
+		assert_nonNeg(self.k, "k")
 		
 		assert (self.k+self.D)*self.N <= self.Ps
 	
@@ -935,22 +935,24 @@ class OligoWalker(GenomicWindowSet, Loggable):
 	def process_window_parallel(oligos, window, fprocess, fpost, *args,
 		N = 1 , opath = None, loggerName = None, **kwargs):
 		# Wrapper of process_window function, for parallelization
+		window_tag = f"{window['s']}.{window['w']}"
 
 		logFormatter = logging.Formatter(Loggable.defaultfmt,
 			datefmt = Loggable.datefmt)
-		logger = logging.getLogger(f"ifpd2-window-{wid}")
+		logger = logging.getLogger(f"ifpd2-window-{window_tag}")
 		logger.setLevel(logging.DEBUG)
 		logger = Loggable(logger)
 		logPath = "{0}/{1}.log".format(opath, "window")
 		logger.addFileHandler(logPath)
 		logger.log.info(f"This log is saved at '{logPath}'.")
 
+
 		mainLogger = logging.getLogger(loggerName)
-		mainLogger.info(f"Window {self.window_tag} sent to pool.")
+		mainLogger.info(f"Window {window_tag} sent to pool.")
 		results = OligoWalker.process_window(oligos, window,
 			fprocess, fpost, *args, N, opath,
-			loggerName = f"ifpd2-window-{wid}", **kwargs)
-		mainLogger.info(f"Processor pool returned window {self.window_tag}.")
+			loggerName = f"ifpd2-window-{window_tag}", **kwargs)
+		mainLogger.info(f"Processor pool returned window {window_tag}.")
 		return results
 
 	@staticmethod
@@ -960,25 +962,23 @@ class OligoWalker(GenomicWindowSet, Loggable):
 		# with fopost. Requires at least N oligos to proceeed. If opath is
 		# specified, a ".done" file is touched upon successful postprocessing.
 		logger = logging.getLogger(loggerName)
+		kwargs['loggerName'] = loggerName
 
 		if len(oligos) >= N:
 			oGroup = OligoGroup(oligos, logger)
 			logger.info(f"Retrieved {oGroup.data.shape[0]} oligos for" +
 				f" window {int(window['s'])}.{int(window['w'])} " +
 				f"[{int(window['start'])}:{int(window['end'])}]")
-			results = fprocess(oGroup, window,
-				loggerName = loggerName, *args, **kwargs)
+			results = fprocess(oGroup, window, *args, **kwargs)
 		else:
 			logger.warning(f"Window {int(window['s'])}.{int(window['w'])}" +
 				" does not have enough oligos " +
 				f"{len(oligos)}/{N}, skipped.")
 			return
 		
-		status, results = fpost(results, opath,
-			loggerName = loggerName, *args, **kwargs)		
+		status, results = fpost(results, opath, *args, **kwargs)		
 		if status and not isinstance(opath, type(None)):
 			Path(os.path.join(opath, ".done")).touch()
-		print(results)
 
 		return (int(window['s']), int(window['w']), results)
 
@@ -1408,10 +1408,10 @@ def assert_inInterv(x, vmin, vmax, label, leftClose = False, rightClose = True):
 def fparse(oligo, opb = None, *args, **kwargs):
 	oligo.add_score(opb.F, opb.Gs)
 
-def fprocess(oGroup, window, opb = None, loggerName = None, *args, **kwargs):
+def fprocess(oGroup, window, *args, **kwargs):
+	opb = copy.copy(kwargs['opb'])
 	assert isinstance(opb, OligoProbeBuilder)
-	opb = copy.copy(opb)
-	logger = logging.getLogger(loggerName)
+	logger = logging.getLogger(kwargs['loggerName'])
 	probe_list = opb.start(oGroup, window, logger)
 	reduced_probe_list = opb.reduce_probe_list(probe_list, opb.Po)
 	logger.log.info(f"Reduced from {len(probe_list)} to " +
@@ -1421,8 +1421,8 @@ def fprocess(oGroup, window, opb = None, loggerName = None, *args, **kwargs):
 def fimport(path, *args, **kwargs):
 	return OligoProbeBuilder.import_probes(path)
 
-def fpost(results, opath, loggerName = None, *args, **kwargs):
-	logger = logging.getLogger(loggerName)
+def fpost(results, opath, *args, **kwargs):
+	logger = logging.getLogger(kwargs['loggerName'])
 	if 0 == len(probe_list):
 		logger.critical(f"Built {len(probe_list)} oligo probe candidates")
 		logger.handlers = logger.handlers[:-1]
