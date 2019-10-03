@@ -935,7 +935,7 @@ class OligoWalker(GenomicWindowSet, Loggable):
 	def process_window_parallel(oligos, window, fprocess, fpost, *args,
 		N = 1 , opath = None, loggerName = None, **kwargs):
 		# Wrapper of process_window function, for parallelization
-		window_tag = f"{window['s']}.{window['w']}"
+		window_tag = f"{int(window['s'])}.{int(window['w'])}"
 
 		logFormatter = logging.Formatter(Loggable.defaultfmt,
 			datefmt = Loggable.datefmt)
@@ -1430,6 +1430,7 @@ def fpost(results, opath, *args, **kwargs):
 		logger.info(f"Built {len(results)} oligo probe candidates")
 		logger.handlers = logger.handlers[:-1]
 		OligoProbeBuilder.export_probes(results, opath)
+	return (True, results)
 
 # RUN ==========================================================================
 
