@@ -10,7 +10,7 @@
 
 # PARAMETERS ===================================================================
 
-out_path = "/mnt/data/COOLFISH/ifpd2_out/test3"
+out_path = "/mnt/data/COOLFISH/ifpd2_out/test4"
 db_path = "/mnt/data/COOLFISH/mm10_chr18_selected_regions.tsv"
 reuse = True
 
@@ -72,6 +72,8 @@ class Oligo(object):
 			oligo[i] = float(oligo[i])
 		self.data = pd.DataFrame(oligo,
 			columns=[i], index=self.__colnames).transpose()
+		seq = self.data['seq'].values[0]
+		self.data['GC'] = seq.count("G")+seq.count("C")
 
 	@property
 	def start(self):
@@ -454,7 +456,12 @@ class OligoProbeBuilder(OligoPathBuilder):
 		# them based on class attributes, and then converts the remaining ones
 		# to OligoProbe objects.
 		
+
 		paths = self.get_non_overlapping_paths(oData, self.D)
+		if 0 == len(paths):
+			logger.warning("No oligo paths found.")
+			return []
+
 		pathMaxLen = np.max([len(p) for p in list(paths)])
 		if verbosity:
 			nPaths = len(paths)
@@ -989,13 +996,12 @@ class OligoProbeSet(object):
 		with open(os.path.join(path, "set.bed"), "w+") as BH:
 			for pi in range(len(self.probe_list)):
 				probe = self.probe_list[pi]
-				#probe.export(os.path.join(path, f"probe_{pi}"))
+				probe.export(os.path.join(path, f"probe_{pi}"))
 				for i in range(probe.data.shape[0]):
 					oligo = probe.data.iloc[i]
 					BH.write(f">probe_{pi}:{oligo['name']}" +
 						f":{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n")
 					BH.write(f"{probe.data.iloc[i]['seq']}\n")
-
 
 class GenomicWindowSet(object):
 	"""Genomic window manager."""
@@ -1265,10 +1271,11 @@ class OligoWalker(GenomicWindowSet, Loggable):
 
 		DBHpb = tqdm(DBH, leave = None, desc = "Parsing records")
 		for line in DBHpb:
-			oligo = Oligo(line, self.r)
+			oligo_start, oligo_end = [int(x)
+				for x in line.strip().split("\t")[2:4]]
 
-			if oligo.start >= self.current_window['start']:
-				if oligo.start >= self.current_window['end']:
+			if oligo_start >= self.current_window['start']:
+				if oligo_start >= self.current_window['end']:
 					DBHpb.clear()
 					
 					exec_results.append(fexec(self.current_oligos,
@@ -1289,9 +1296,10 @@ class OligoWalker(GenomicWindowSet, Loggable):
 						self.remove_oligos_starting_before(
 							self.current_window['start'])
 
-				if oligo.end > self.E:	# End reached
+				if oligo_end > self.E:	# End reached
 					break
 
+				oligo = Oligo(line, self.r)
 				fparse(oligo, *args, **kwargs)
 
 				if not np.isnan(oligo.score):
