@@ -26,6 +26,7 @@ import os
 import pandas as pd
 from pathlib import Path
 import shutil
+import sys
 from tqdm import tqdm
 
 # CLASSES ======================================================================
@@ -93,26 +94,29 @@ class Oligo(object):
 
 	def add_score(self, F, Gs):
 		nOT = self.data['nOT'].values
-		if nOT <= F[0]: return 0
-		if nOT > F[1]: return np.inf
+		if nOT <= F[0]:
+			self.data['score'] = 0
+			return
+		if nOT > F[1]:
+			self.data['score'] = np.inf
+			return
 		norm_nOT = self.__norm_value_in_range(nOT, F)
 
 		ss_dG = self.data['ss_dG'].values
 		if isinstance(Gs[0], int):
-			if ss_dG >= Gs[0]: return 0
-			if ss_dG < Gs[1]: return np.inf
+			if ss_dG >= Gs[0]: score = 0
+			if ss_dG < Gs[1]: score = np.inf
 			norm_ss_dG = self.__norm_value_in_range(ss_dG, Gs)
 		else:
 			tm_dG = self.data['tm_dG'].values
-			if ss_dG >= tm_dG*Gs[0]: return 0
-			if ss_dG < tm_dG*Gs[1]: return np.inf
+			if ss_dG >= tm_dG*Gs[0]: score = 0
+			if ss_dG < tm_dG*Gs[1]: score = np.inf
 			norm_ss_dG = self.__norm_value_in_range(ss_dG,
 				[tm_dG*f for f in Gs])
+		self.data['score'] = np.mean([norm_nOT, norm_ss_dG])
 
-		self.data['score'] = [np.mean([norm_nOT, norm_ss_dG])]
-
-class OligoProbeBuilder(Loggable):
-	"""OligoProbeBuilder contains methods to select non-overlapping sets of
+class OligoPathBuilder(object):
+	"""OligoPathBuilder contains methods to select non-overlapping sets of
 	oligos (i.e., probes) from an oligo DataFrame in input."""
 
 	N = int(48)			# Number of oligos per probe
@@ -122,8 +126,8 @@ class OligoProbeBuilder(Loggable):
 	Ph = .1				# Maximum hole size in probe as fraction of probe size
 	Po = .5				# Probe oligo intersection threshold for path reduction
 
-	def __init__(self, logger = logging.getLogger()):
-		super(OligoProbeBuilder, self).__init__(logger)
+	def __init__(self):
+		super(OligoPathBuilder, self).__init__()
 
 	def _assert(self):
 		assert_type(self.N, int, "N")
@@ -144,8 +148,9 @@ class OligoProbeBuilder(Loggable):
 		assert_type(self.Po, float, "Po")
 		assert_inInterv(self.Po, 0, 1, "Po")
 
-	def get_non_overlapping_paths(self, oData):
-		# Gets all paths of N consecutive non-overlapping oligos with minimum
+	@staticmethod
+	def get_non_overlapping_paths(oData, D):
+		# Gets all paths of consecutive non-overlapping oligos with minimum
 		# distance equal to D
 		assert_type(oData, pd.DataFrame, "oData")
 
@@ -155,8 +160,8 @@ class OligoProbeBuilder(Loggable):
 
 		for i in range(oData.shape[0]):
 			edges.append(np.logical_or(
-				end_positions+self.D < oData["start"].values[i],
-				start_positions-self.D >= oData["end"].values[i]
+				end_positions+D < oData["start"].values[i],
+				start_positions-D >= oData["end"].values[i]
 			))
 
 		A = np.vstack(edges).astype('i')
@@ -190,22 +195,6 @@ class OligoProbeBuilder(Loggable):
 
 		return path_set
 
-	def __path_passes(self, path, oData):
-		if not isinstance(path, list): path = list(path)
-		pData = oData.iloc[path, :]
-		probe_size = pData['end'].values[-1]
-		probe_size -= pData['start'].values[0]
-		if self.Ps < probe_size:
-			return (False, 'S')
-		dData = pData['start'].values[1:] - pData['end'].values[:-1]
-		max_hole_size = dData.max()
-		if self.Ph * probe_size < max_hole_size:
-			return (False, 'H')
-		Tm_range = pData['Tm'].max()-pData['Tm'].min()
-		if 2*self.Tr < Tm_range:
-			return (False, 'T')
-		return (True, 'P')
-
 	def filter_paths(self, path_set, oData):
 		# Selects oligo paths based on length, melting temperature, size, and
 		# presence of gaps.
@@ -237,6 +226,22 @@ class OligoProbeBuilder(Loggable):
 		comment = "".join([f"{r}{c}" for (c,r) in exit_polls.items()])
 		return (list(selected_paths), comment)
 
+	def __path_passes(self, path, oData):
+		if not isinstance(path, list): path = list(path)
+		pData = oData.iloc[path, :]
+		probe_size = pData['end'].values[-1]
+		probe_size -= pData['start'].values[0]
+		if self.Ps < probe_size:
+			return (False, 'S')
+		dData = pData['start'].values[1:] - pData['end'].values[:-1]
+		max_hole_size = dData.max()
+		if self.Ph * probe_size < max_hole_size:
+			return (False, 'H')
+		Tm_range = pData['Tm'].max()-pData['Tm'].min()
+		if 2*self.Tr < Tm_range:
+			return (False, 'T')
+		return (True, 'P')
+
 	@staticmethod
 	def convert_paths_to_probes(path_list, oData):
 		# Converts a list of paths into a list of probes
@@ -253,28 +258,34 @@ class OligoProbeBuilder(Loggable):
 		return OligoProbe(oData.iloc[list(path), :])
 
 	def reduce_probe_list(self, probe_list, thr):
-		if 0 == len(probe_list):
-			return []
-		sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
-		selected_probes = []
-		probe_ref = sorted_probes[0]
-		for probe in sorted_probes[1:-1]:
-			n_shared_oligos = probe_ref.count_shared_oligos(probe)
-			if probe_ref.n_oligos == n_shared_oligos:
-				self.log.critical("Encountered probe duplicates!")
-				continue
-			if thr * self.N <= n_shared_oligos:
-				probe_ref = self.select_probe_from_pair(probe_ref, probe)
-			else:
+		try:
+			if 0 == len(probe_list): return []
+			sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
+
+			selected_probes = []
+			probe_ref = sorted_probes[0]
+			for probe in sorted_probes[1:-1]:
+				n_shared_oligos = probe_ref.count_shared_oligos(probe)
+
+				if probe_ref.n_oligos == n_shared_oligos:
+					raise Exception("Encountered probe duplicates!")
+
+				if thr * self.N <= n_shared_oligos:
+					probe_ref = self.select_probe_from_pair(probe_ref, probe)
+				else:
+					selected_probes.append(probe_ref)
+					probe_ref = probe
+
+			if not probe_ref in selected_probes:
 				selected_probes.append(probe_ref)
-				probe_ref = probe
-		if not probe_ref in selected_probes:
-			selected_probes.append(probe_ref)
-		if thr * self.N > probe_ref.count_shared_oligos(sorted_probes[-1]):
-			selected_probes.append(sorted_probes[-1])
-		self.log.info(f"Reduced {len(probe_list)} to " +
-			f"{len(selected_probes)} probes.")
-		return selected_probes
+
+			if thr * self.N > probe_ref.count_shared_oligos(sorted_probes[-1]):
+				selected_probes.append(sorted_probes[-1])
+
+			return selected_probes
+		except Exception as e:
+			print(e)
+			raise
 
 	def select_probe_from_pair(self, probeA, probeB):
 		if probeA.size < probeB.size:
@@ -291,238 +302,26 @@ class OligoProbeBuilder(Loggable):
 			return probeB
 		return probeA
 
-class GenomicWindowSet(object):
-	"""Genomic window manager."""
+class OligoProbeBuilder(OligoPathBuilder):
+	"""docstring for OligoProbeBuilder"""
 
-	_window_sets = None
-
-	S = int(3000000)	# Region start coordinate (included)
-	E = int(3500000)	# Region end coordinate (excluded)
-
-	X = 20				# Number of probes to design
-	Ws = None			# Window size (used when X is not provided)
-	Wh = 0.1			# Window shift (as a percentage of the window size)
-
-	def __init__(self):
-		super(GenomicWindowSet, self).__init__()
-
-	def _assert(self):
-		assert_type(self.S, int, "S")
-		assert_nonNeg(self.S, "S")
-		assert_type(self.E, int, "E")
-		assert_nonNeg(self.E, "E")
-		assert self.S < self.E
-
-		assert_multiTypes(self.X, [int, type(None)], "X")
-		assert_type(self.Ws, type(None), "Ws")
-		if isinstance(self.X, int):
-			assert_type(self.Ws, type(None), "Ws")
-			assert_nonNeg(self.X, "X")
-		else:
-			assert_type(self.Ws, int, "Ws")
-
-		assert_multiTypes(self.Ws, [int, type(None)], "Ws")
-		if isinstance(self.Ws, int):
-			assert_type(self.X, type(None), "X")
-			assert_nonNeg(self.Ws, "Ws")
-		else:
-			assert_type(self.X, int, "X")
-
-		assert_type(self.Wh, float, "Wh")
-		assert_inInterv(self.Wh, 0, 1, "Wh")
-
-	def _init_windows(self):
-		# Build windows and central focus regions (CFR)
-		if not os.path.isdir(os.path.join(self.out_path, "window_sets")):
-			os.mkdir(os.path.join(self.out_path, "window_sets"))
-
-		if isinstance(self.X, int):
-			self.Ws = np.floor((self.E-self.S)/(self.X+1)).astype("i")
-
-		window_starts = np.floor(np.arange(self.S,self.E,self.Ws)).astype("i")
-		if 0 != (self.E-self.S)%self.Ws:
-			window_starts = window_starts[:-1]
-
-		window_mids = (window_starts[:-1]+self.Ws/2
-			).reshape((window_starts.shape[0]-1, 1))
-		window_borders = np.transpose(np.vstack(
-			[window_starts[:-1], window_starts[:-1]+self.Ws]))
-
-		nWindows = window_borders.shape[0]
-
-		if isinstance(self.Rs, float):
-			self.Rs = int(self.Rs*self.Ws)
-		if isinstance(self.Rt, float):
-			self.Rt = int(self.Rs*self.Rt)
-		if self.Rs < self.Ws:
-			central_regions = np.hstack([np.floor(window_mids-self.Rs/2),
-				np.floor(window_mids+self.Rs/2)])
-			self.__focus_on_center = True
-		else:
-			nans = np.array([np.nan for x in range(window_mids.shape[0])])
-			central_regions = np.vstack([nans, nans]).transpose()
-			self.__focus_on_center = False
-
-		window_sets = []
-		for i in range(len(np.arange(0, 1, self.Wh))):
-			winID = np.array(range(nWindows)).reshape((nWindows, 1))
-			setID = np.repeat(i, nWindows).reshape((nWindows, 1))
-			window_sets.append(np.hstack([
-				window_borders+i*self.Wh*self.Ws,
-				window_mids+i*self.Wh*self.Ws,
-				central_regions+i*self.Wh*self.Ws,
-				winID, setID])[ :, (0, 2, 1, 3, 4, 5, 6)])
-
-		self._w = 0 # Window ID
-		self._reached_last_window = False
-		self.window_sets = window_sets
-
-	@property
-	def window_sets(self):
-		return self._window_sets
-	
-	@window_sets.setter
-	def window_sets(self, window_sets):
-		self._window_sets = pd.DataFrame(np.vstack(window_sets))
-		self._window_sets.columns = [
-			"start", "mid", "end", "cfr_start", "cfr_end", "w", "s"]
-		self._window_sets.sort_values("end", inplace = True)
-		self._window_sets.reset_index(inplace = True)
-
-	@property
-	def wid(self):
-		return self._w
-
-	@property
-	def current_window(self):
-		return self.window_sets.iloc[self.wid, :]
-
-	@property
-	def reached_last_window(self):
-		return self._reached_last_window
-
-	def go_to_next_window(self):
-		if self.wid < self.window_sets.shape[0]-1:
-			self._w += 1
-		if self.wid == self.window_sets.shape[0]-1:
-			self._reached_last_window = True
-
-class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
-	"""OligoWalker walks through the oligos stored in an ifpd2 database,
-	assigns them to windows based on user-defined parameters, and then builds
-	probe candidates."""
-
-	db_path = None
-	out_path = "."
-	reuse = False
-	threads = 40
-
-	C = "chr18"			# Chromosome
 	k = 40
-
-	Rs = int(8000)		# Region focus size, either in nt (Rs > 1)
-						#  or fraction of Ws (0<Rs<=1)
-						#  When provided in nt, it is applied only if Rs<Ws
-	Rt = int(1000)		# Region focus step, either in nt (Rt > 1)
-						#  or fraction of Rs (0<Rt<=1),
-						#  for focus region expansion
-
 	F = (0, 100)		# Threshold on number of off-targets (range)
 	Gs = (0.0, 0.5)		# dG of SS either as kcal/mol (negative)
 						#  or as fraction dG of hybrid (0<=Gs<=1)
 						#  (range)
 	Ot = .1				# Step for oligo score relaxation
 
-	__current_oligos = []
-	__probe_candidates = {}
-
-	def __init__(self, db_path, logger = logging.getLogger()):
-		OligoProbeBuilder.__init__(self, logger)
-		GenomicWindowSet.__init__(self)
-		self.db_path = db_path
-
-	@property
-	def current_oligos(self):
-		return self.__current_oligos
-
-	def remove_oligos_starting_before(self, pos):
-		self.__current_oligos = [o for o in self.current_oligos
-			if o.start >= pos]
-
-	@property
-	def probe_candidates(self):
-		return self.__probe_candidates	
-
-	@property
-	def window_set_path(self):
-		return os.path.join(self.out_path, "window_sets",
-			f"set_{int(self.current_window['s'])}")
-
-	@property
-	def window_path(self):
-		return os.path.join(self.window_set_path,
-			f"window_{int(self.current_window['w'])}")
-
-	@property
-	def window_tag(self):
-		window = self.current_window
-		return f"{int(window['s'])}.{int(window['w'])}"
-
-	@property
-	def window_range(self):
-		window = self.current_window
-		return f"[{int(window['start'])}:{int(window['end'])}]"
-
-	@property
-	def config(self):
-		config = cp.ConfigParser()
-		config['AIM'] = {
-			'Region' : f"{self.C}:{self.S}-{self.E}",
-			'Probe(s) number' : self.X,
-			'Oligo(s) number' : self.N,
-			'Oligo length (nt)' : self.k
-		}
-		config['WINDOWS'] = {
-			'Window size' : self.Ws,
-			'Window step' : self.Wh,
-			'Focus region size' :  self.Rs,
-			'Focus region step' : self.Rt
-		}
-		config['OLIGO FILTERS'] = {
-			'Off-target threshold' : self.F,
-			'Secondary structure dG threshold' : self.Gs,
-			'Oligo score relaxation step' : self.Ot
-		}
-		config['PROBE FILTERS'] = {
-			'Melting temperature range (degC)' : self.Tr,
-			'Min. consecutive oligo distance (nt)' : self.D,
-			'Probe size threshold' : self.Ps,
-			'Maximum hole size' : self.Ph
-		}
-		return config
+	def __init__(self):
+		super(OligoProbeBuilder, self).__init__()
 
 	def _assert(self):
-		OligoProbeBuilder._assert(self)
-		GenomicWindowSet._assert(self)
+		OligoPathBuilder._assert(self)
 
-		assert os.path.isfile(self.db_path)
-		assert os.path.isdir(self.out_path)
-
-		assert_type(self.C, str, "C")
-
-		assert_multiTypes(self.Rs, [int, float], "Rs")
-		if isinstance(self.Rs, int):
-			assert self.Rs > 1
-		else:
-			assert_inInterv(self.Rs, 0, 1, "Rs")
+		assert_type(self.k, int, "k")
+		assert_nonNeg(self.k, "k")
 		
 		assert (self.k+self.D)*self.N <= self.Ps
-
-		assert_multiTypes(self.Rt, [int, float], "Rt")
-		if isinstance(self.Rt, int):
-			assert self.Rt > 1
-		else:
-			assert_inInterv(self.Rt, 0, 1, "Rt")
 	
 		assert_type(self.F, tuple, "F")
 		assert 2 == len(self.F)
@@ -545,26 +344,9 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		assert_type(self.Ot, float, "Ot")
 		assert 0 < self.Ot and 1 >= self.Ot
 
-	def start(self):
-		self._assert()
-		self._init_windows()
-		self.__print_prologue()
-		self.__walk_db()
-		self.__build_probe_set_candidates()
-
-	def __print_prologue(self):
-		nProbes = self.window_sets['w'].max().astype('i')+1
-		nSets = self.window_sets["s"].max().astype('i')+1
-
-		s  = f"\nDatabase: '{self.db_path}'\n"
-		s += f"Region of interest: {self.C}:{self.S}-{self.E}\n"
-		s += f"Aim to build {nProbes} probes, each with {self.N} oligos.\n\n"
-
-		s += f"Using a central focus region of {self.Rs} nt,"
-		s += f" in windows of size {self.Ws} nt,\n"
-		s += f"built with a shift of {self.Ws*self.Wh} nt ({self.Wh*100}%).\n"
-		s += f"Thus, a total of {nSets} window sets will be explored.\n\n"
-
+	def get_prologue(self):
+		s  = f"* OligoProbeBuilder *\n\n"
+		s += f"Aim to build probes with {self.N} oligos each.\n"
 		s += f"Off-target threshold range set at {self.F}.\n"
 		if isinstance(self.Gs[0], int):
 			s += f"Threshold on the delta free energy of the most stable"
@@ -582,304 +364,41 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		s += f"Reducing probes when oligo intersection fraction is equal to"
 		s += f" or greater than {self.Po}.\n"
 
-		self.log.info(s)
+		return s
 
-	def __walk_db(self):
-		if 1 == self.threads:
-			fexec = self.select_from_window
-		else:
-			pool = mp.Pool(np.min([self.threads, mp.cpu_count()]))
-			self.log.info(f"Prepared a pool of {self.threads} threads.")
-			fexec = lambda args: pool.apply_async(
-				self.parallelizable_select_from_window, args)
-		DBH = open(self.db_path, "r")
-		next(DBH)
-
-		self.__preprocess_window()
-		self.__load_windows_until_next_to_do()
-
-		if self.reached_last_window and self.__window_done():
-			self.log.info("All windows pre-processed. Skipped database walk.")
-			return
-
-		self.r = 0 # Record ID
-		self.rw = 0 # Walk step counter
-
-		probe_data = []
-
-		DBHpb = tqdm(DBH, leave = None, desc = "Parsing records")
-		for line in DBHpb:
-			oligo = Oligo(line, self.r)
-
-			if oligo.start >= self.current_window['start']:
-				if oligo.start >= self.current_window['end']:
-					DBHpb.clear()
-					
-					probe_data.append(fexec((self.db_path, self.out_path,
-						self.window_path, self.current_oligos,
-						self.window_sets, self.wid,
-						self.Rs, self.Rt, self.Ot,
-						self.N, self.D, self.Tr, self.Ps, self.Ph
-					)))
-
-					if self.reached_last_window:
-						break
-
-					self.go_to_next_window()
-					self.__preprocess_window()
-					self.__load_windows_until_next_to_do()
-					if self.reached_last_window and self.__window_done():
-						break
-
-					if 0 != len(self.current_oligos):
-						self.remove_oligos_starting_before(
-							self.current_window['start'])
-
-				if oligo.end > self.E:	# End reached
-					break
-
-				oligo.add_score(self.F, self.Gs)
-
-				if not np.isnan(oligo.score):
-					self.current_oligos.append(oligo)
-
-				self.rw += 1
-
-			self.r += 1
-		self.log.info(f"Parsed {self.rw}/{self.r} records.")
-
-		if 1 < self.threads:
-			for promise in probe_data:
-				s, w, probe_candidates = promise.get()
-				if s in self.probe_candidates.keys():
-					self.probe_candidates[s][w] = probe_candidates
-				else:
-					self.probe_candidates[s] = {w : probe_candidates}
-
-		DBH.close()
-		pool.close()
-
-	def __window_done(self):
-		s = int(self.current_window['s'])
-		w = int(self.current_window['w'])
-		if s in self.probe_candidates.keys():
-			if w in self.probe_candidates[s].keys():
-				return isinstance(self.probe_candidates[s][w], list)
-		return False
-
-	def __load_windows_until_next_to_do(self):
-		while self.__window_done() and not self.reached_last_window:
-			self.go_to_next_window()
-			self.__preprocess_window()
-
-	def __import_window_output(self):
-		# Imports output for current window
-		pPath = os.path.join(self.window_path, "probe_paths.tsv")
-		if not os.path.isfile(pPath):
-			self.log.critical("Found 0 probe candidates to load " +
-				f"for window {self.window_tag}.")
-			return []
-		oPath = os.path.join(self.window_path, "oligos.tsv")
-		assert os.path.isfile(oPath)
-		
-		oligos = pd.read_csv(oPath, "\t", index_col = 0)
-		paths = pd.read_csv(pPath, "\t", index_col = 0)
-
-		self.log.info(f"Loading {paths.shape[0]} probe candidates " +
-			f"for window {self.window_tag}.")
-
-		probe_list = []
-		for p in paths.iloc[:, 0]:
-			probe_list.append(OligoProbe(oligos.loc[
-				[int(o) for o in p.split(",")]]))
-
-		return(probe_list)
-
-	def __preprocess_window(self):
-		# Preprocess current window
-		# Triggers import if previously run and matching current window
-		window = self.current_window
-
-		if not os.path.isdir(self.window_set_path):
-			os.mkdir(self.window_set_path)
-			self.window_sets.loc[
-				self.window_sets['s'] == window['s'],:].to_csv(
-				os.path.join(self.window_set_path, "windows.tsv"), "\t")
-
-		if not os.path.isdir(self.window_path):
-			os.mkdir(self.window_path)
-		else:
-			if not self.reuse:
-				shutil.rmtree(self.window_path)
-				os.mkdir(self.window_path)
-
-			win_file_path = os.path.join(self.window_path, "window.tsv")
-			win_done = os.path.isfile(os.path.join(self.window_path, ".done"))
-
-			if os.path.isfile(win_file_path) and win_done:
-				win = pd.read_csv(win_file_path, sep='\t',
-					header=None, index_col=0)
-
-				if (win.transpose().values == window.values).all():
-					self.log.info("Re-using previous results for window " +
-						f"{self.window_tag} {self.window_range}")
-
-					if not int(window['s']) in self.probe_candidates.keys():
-						self.probe_candidates[int(window['s'])] = {}
-					self.probe_candidates[int(window['s'])][int(window['w'])
-						] = self.__import_window_output()
-					return
-				else:
-					shutil.rmtree(self.window_path)
-					os.mkdir(self.window_path)
-			else:
-				shutil.rmtree(self.window_path)
-				os.mkdir(self.window_path)
-
-		window.to_csv(os.path.join(self.window_path, "window.tsv"),
-			sep = "\t", index = True)
-		with open(os.path.join(self.window_path, ".config"), "w+") as CPH:
-			self.config.write(CPH)
-
-	@staticmethod
-	def parallelizable_select_from_window(db_path, out_path, window_path,
-		oligos, window_sets, wid, Rs, Rt, Ot, N, D, Tr, Ps, Ph,
-		main_logger_tag = "ifpd2-main"):
-		logFormatter = logging.Formatter(Loggable.defaultfmt,
-			datefmt = Loggable.datefmt)
-		logger = logging.getLogger(f"ifpd2-window-{wid}")
-		logger.setLevel(logging.DEBUG)
-		logger = Loggable(logger)
-		logPath = "{0}/{1}.log".format(window_path, "window")
-		logger.addFileHandler(logPath)
-		logger.log.info(f"This log is saved at '{logPath}'.")
-
-		self = OligoWalker(db_path, logger.log)
-		self.out_path = out_path
-		self.__current_oligos = oligos
-		self._window_sets = window_sets
-		self._w = wid
-		self.Rs = Rs
-		self.Rt = Rt
-		self.Ot = Ot
-		self.N = N
-		self.D = D
-		self.Tr = Tr
-		self.Ps = Ps
-		self.Ph = Ph
+	def start(self, oGroup, window, cfr_step, logger):
 		self._assert()
+		return self.__build_probe_candidates(oGroup, window, cfr_step, logger)
 
-		mainLogger = logging.getLogger(main_logger_tag)
-		mainLogger.info(f"Processor pool received window {self.window_tag}.")
-
-		output = self.select_from_window()
-		if 0 == len(output[2]):
-			mainLogger.critical("Processor pool returned 0 probe candidates " +
-				f"for window {self.window_tag}.")
-			return []
-
-		mainLogger.info(f"Processor pool returned window {self.window_tag}.")
-
-		return output
-
-	def select_from_window(self, *args):
-		window = self.current_window
-
-		if len(self.current_oligos) >= self.N:
-			oGroup = OligoGroup(self.current_oligos, self.log)
-			self.log.info(f"Retrieved {oGroup.data.shape[0]} oligos for" +
-				f" window {self.window_tag} {self.window_range}")
-			probe_list = self.__build_probe_candidates(oGroup)
-			probe_list = self.reduce_probe_list(probe_list, self.Po)
-		else:
-			self.log.warning(f"Window {self.window_tag} does not have enough" +
-				f" oligos {len(self.current_oligos)}/{self.N}, skipped.")
-			return
-		
-		if 0 == len(probe_list):
-			self.log.critical(f"Built {len(probe_list)} oligo probe candidates")
-			self.log.handlers = self.log.handlers[:-1]
-		else:
-			self.log.info(f"Built {len(probe_list)} oligo probe candidates")
-			self.log.handlers = self.log.handlers[:-1]
-			self.__export_probes(probe_list)			
-
-		Path(os.path.join(self.window_path, ".done")).touch()
-
-		if not int(window['s']) in self.probe_candidates.keys():
-			self.probe_candidates[int(window['s'])] = {}
-
-		return (int(window['s']), int(window['w']), probe_list)
-
-	def __export_probes(self, probe_list):
-		probe_df = pd.concat([op.featDF for op in probe_list],
-			ignore_index = True)
-		probe_df.sort_values("start", inplace = True)
-		probe_df.to_csv(os.path.join(self.window_path, "probe_feat.tsv"), "\t")
-
-		pd.concat([p.data for p in probe_list]).drop_duplicates().to_csv(
-			os.path.join(self.window_path, "oligos.tsv"), "\t")
-
-		probe_paths = []
-		for pi in range(len(probe_list)):
-			probe_paths.append([",".join([str(x)
-				for x in probe_list[pi].data.index.tolist()])])
-		probe_paths = pd.DataFrame(probe_paths)
-		probe_paths.columns = ["cs_oligos"]
-		probe_paths.to_csv(os.path.join(
-			self.window_path, "probe_paths.tsv"), "\t")
-
-	def __build_probe_candidates(self, oGroup):
+	def __build_probe_candidates(self, oGroup, window, cfr_step, logger):
 		# Applies oligo filters to the oligo group,
 		# expands the focus group if needed, and build probe candidates
 		
-		if np.isnan(self.window_sets.loc[self.wid, 'cfr_start']):
+		if np.isnan(window['cfr_start']):
 			oGroup.focus_all()
 		else:
-			oGroup.set_focus_window(self.window_sets.loc[self.wid, 'cfr_start'],
-				self.window_sets.loc[self.wid, 'cfr_end'])
+			oGroup.set_focus_window(window['cfr_start'], window['cfr_end'])
 			oGroup.expand_focus_to_n_oligos(self.N)
 
-		probe_list = self.__explore_filter(oGroup)
-		if not np.isnan(self.window_sets.loc[self.wid, 'cfr_start']):
+		probe_list = self.__explore_filter(oGroup, logger)
+		if not np.isnan(window['cfr_start']):
 			while 0 == len(probe_list):
 				oGroup.reset_threshold()
 				if oGroup.focus_window_size >= self.Ps:
 					oGroup.discard_focused_oligos_safeN(self.N-1, self.D)
-				if not oGroup.expand_focus_by_step(self.Rt):
+				if not oGroup.expand_focus_by_step(cfr_step):
 					break
-				probe_list = self.__explore_filter(oGroup)
-		else:
-			self.log.warning("No CFR expansion, whole window already included.")
+				probe_list = self.__explore_filter(oGroup, logger)
 		
-		return(probe_list)
+		return probe_list
 
-	def __get_non_overlapping_probes(self, oData, verbosity = True):
-		paths = self.get_non_overlapping_paths(oData)
-		pathMaxLen = np.max([len(p) for p in list(paths)])
-		if verbosity:
-			nPaths = len(paths)
-			self.log.info(f"Found {nPaths} sets with up to {pathMaxLen} " +
-				f"non-overlapping oligos.")
-		if pathMaxLen < self.N:
-			self.log.warning(f"Longest path is shorter than requested. " + 
-				"Skipped.")
-			return []
-
-		paths, comment = self.filter_paths(paths, oData)
-		if verbosity:
-			self.log.info(f"{len(paths)}/{nPaths} oligo paths remaining " +
-				f"after filtering. ({comment})")
-
-		return self.convert_paths_to_probes(paths, oData)
-
-	def __explore_filter(self, oGroup):
+	def __explore_filter(self, oGroup, logger):
 		# Explores the 0-to-max_score score threshold range and stops as soon as
 		# one probe candidate passes all user-defined thresholds
 		
 		if oGroup.focus_window_size < self.Ps:
 			max_score = 0
-			self.log.warning("Score relaxation deactivated when focus region" +
+			logger.warning("Score relaxation deactivated when focus region" +
 				" size is smaller than probe size threshold.")
 		else:
 			max_score = 1
@@ -889,7 +408,7 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 		score_thr = 0
 		oGroup.apply_threshold(score_thr)
 		nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
-		self.log.info(f"Set oligo score threshold at {score_thr:.3f}" +
+		logger.info(f"Set oligo score threshold at {score_thr:.3f}" +
 			f" ({nOligos_prev_score_thr} oligos usable)...")
 
 		if 0 == max_score and 0 == nOligos_prev_score_thr:
@@ -899,11 +418,11 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			score_thr += self.Ot
 			oGroup.apply_threshold(score_thr)
 			nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
-			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
+			logger.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
 				f" ({nOligos_prev_score_thr} oligos usable)...")
 
 		probe_list = self.__get_non_overlapping_probes(
-			oGroup.get_focused_oligos(True))
+			oGroup.get_focused_oligos(True), logger)
 		while 0 == len(probe_list):
 			score_thr += self.Ot
 			if score_thr > max_score:
@@ -917,56 +436,82 @@ class OligoWalker(OligoProbeBuilder, GenomicWindowSet):
 			if 0 == nOligosUsable:
 				continue
 
-			self.log.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
+			logger.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
 				f" ({nOligosUsable} oligos usable)...")
 			probe_list = self.__get_non_overlapping_probes(
-				oGroup.get_focused_oligos(True))
+				oGroup.get_focused_oligos(True), logger)
 
 			if nOligosUsable == nOligos_in_focus_window:
-				self.log.warning(
+				logger.warning(
 					"All oligos included. Score relaxation ineffective.")
 				break
 			nOligos_prev_score_thr = nOligosUsable
 
 		return(probe_list)
 
-	def __build_probe_set_candidates(self):
-		probeSet_path = os.path.join(self.out_path, "probe_sets")
-		if os.path.isdir(probeSet_path):
-			shutil.rmtree(probeSet_path)
-		os.mkdir(probeSet_path)
+	def __get_non_overlapping_probes(self, oData, logger, verbosity = True):
+		# Builds non overlapping oligo paths from an oligo data table, filters
+		# them based on class attributes, and then converts the remaining ones
+		# to OligoProbe objects.
+		
+		paths = self.get_non_overlapping_paths(oData, self.D)
+		pathMaxLen = np.max([len(p) for p in list(paths)])
+		if verbosity:
+			nPaths = len(paths)
+			logger.info(f"Found {nPaths} sets with up to {pathMaxLen} " +
+				f"non-overlapping oligos.")
+		if pathMaxLen < self.N:
+			logger.warning(f"Longest path is shorter than requested. " + 
+				"Skipped.")
+			return []
 
-		nProbes = []
-		probe_set_candidates = []
-		for (wSet, window_list) in self.probe_candidates.items():
-			probe_set_list = [(p,) for p in list(window_list.values())[0]]
-			#nProbes = [len(probes) for probes in window_list.values()]
-			#nProbeSets = np.sum([n for n in nProbes if 0 != n])
+		paths, comment = self.filter_paths(paths, oData)
+		if verbosity:
+			logger.info(f"{len(paths)}/{nPaths} oligo paths remaining " +
+				f"after filtering. ({comment})")
 
-			for w in list(window_list.values())[1:]:
-				if 0 == len(w): continue
+		return self.convert_paths_to_probes(paths, oData)
 
-				current_probe_set_list = list(tuple(probe_set_list))
-				probe_set_list = []
+	@staticmethod
+	def import_probes(ipath):
+		# Imports output from given directory path
+		assert os.path.isdir(ipath)
 
-				for probe in w:
-					for probe_set in current_probe_set_list:
-						current_probe_set = list(probe_set)
-						current_probe_set.append(probe)
-						probe_set_list.append(current_probe_set)
+		pPath = os.path.join(ipath, "probe_paths.tsv")
+		if not os.path.isfile(pPath): return []
 
-			probe_set_candidates.extend(probe_set_list)
-			self.log.info(f"Built {len(probe_set_list)} probe set candidates " +
-				f"from window set #{wSet+1}")
+		oPath = os.path.join(ipath, "oligos.tsv")
+		if not os.path.isfile(oPath): return []
+		
+		oligos = pd.read_csv(oPath, "\t", index_col = 0)
+		paths = pd.read_csv(pPath, "\t", index_col = 0)
 
-		probe_set_candidates = [OligoProbeSet(ps)
-			for ps in probe_set_candidates]
-		self.log.info(f"Built {len(probe_set_candidates)} " +
-			"probe set candidates in total.")
+		probe_list = []
+		for p in paths.iloc[:, 0]:
+			probe_list.append(OligoProbe(oligos.loc[
+				[int(o) for o in p.split(",")]]))
 
-		pd.concat([ps.featDF for ps in probe_set_candidates]
-			).reset_index(drop = True).to_csv(
-			os.path.join(probeSet_path, "probe_set_candidates.tsv"), "\t")
+		return probe_list
+
+	@staticmethod
+	def export_probes(probe_list, opath):
+		# Exports a list of probes to a directory
+		assert os.path.isdir(opath)
+
+		probe_df = pd.concat([p.featDF for p in probe_list], ignore_index=True)
+		probe_df.sort_values("start", inplace = True)
+		probe_df.to_csv(os.path.join(opath, "probe_feat.tsv"), "\t")
+
+		pd.concat([p.data for p in probe_list]).drop_duplicates().to_csv(
+			os.path.join(opath, "oligos.tsv"), "\t")
+
+		probe_paths = []
+		for pi in range(len(probe_list)):
+			probe_paths.append([",".join([str(x)
+				for x in probe_list[pi].data.index.tolist()])])
+		probe_paths = pd.DataFrame(probe_paths)
+		probe_paths.columns = ["cs_oligos"]
+		probe_paths.to_csv(os.path.join(opath, "probe_paths.tsv"), "\t")
 
 class OligoGroup(Loggable):
 	"""Allows to select oligos from a group based on a "focus" window of
@@ -1271,6 +816,73 @@ class OligoProbe(object):
 		# based on their paths
 		return np.intersect1d(self.path, probe.path).shape[0]
 
+	def export(self, path):
+		assert not os.path.isfile(path)
+		if os.path.isdir(path):
+			shutil.rmtree(path)
+		os.mkdir(path)
+
+		self.featDF.to_csv(os.path.join(path, "probe.tsv"), "\t", index = False)
+		self.data.to_csv(os.path.join(path, "oligos.tsv"), "\t", index = False)
+
+		with open(os.path.join(path, "probe.bed"), "w+") as BH:
+			for i in range(self.data.shape[0]):
+				oligo = self.data.iloc[i]
+				BH.write(f">{oligo['name']}:" +
+					f"{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n")
+				BH.write(f"{oligo['seq']}\n")
+
+class OligoProbeSetBuilder(Loggable):
+	"""docstring for OligoProbeSetBuilder"""
+
+	probe_set_list = []
+
+	def __init__(self, out_path, logger = logging.getLogger()):
+		Loggable.__init__(self, logger)
+		assert not os.path.isfile(out_path)
+		self.out_path = out_path
+		if os.path.isdir(out_path):
+			shutil.rmtree(out_path)
+		os.mkdir(out_path)
+
+	def build(self, probe_candidates):
+		nProbes = []
+		for (wSet, window_list) in probe_candidates.items():
+			probe_set_list = [(p,) for p in list(window_list.values())[0]]
+			#nProbes = [len(probes) for probes in window_list.values()]
+			#nProbeSets = np.sum([n for n in nProbes if 0 != n])
+
+			for w in list(window_list.values())[1:]:
+				if 0 == len(w): continue
+
+				current_probe_set_list = list(tuple(probe_set_list))
+				probe_set_list = []
+
+				for probe in w:
+					for probe_set in current_probe_set_list:
+						current_probe_set = list(probe_set)
+						current_probe_set.append(probe)
+						probe_set_list.append(current_probe_set)
+
+			self.probe_set_list.extend(probe_set_list)
+			self.log.info(f"Built {len(probe_set_list)} probe set candidates " +
+				f"from window set #{wSet+1}")
+
+		self.probe_set_list = [OligoProbeSet(ps)
+			for ps in self.probe_set_list]
+		self.log.info(f"Built {len(self.probe_set_list)} " +
+			"probe set candidates in total.")
+
+		pd.concat([ps.featDF for ps in self.probe_set_list]
+			).reset_index(drop = True).to_csv(
+			os.path.join(self.out_path, "probe_sets.tsv"), "\t")
+
+	def export(self):
+		self.log.info("Exporting probe sets...")
+		for psi in tqdm(range(len(self.probe_set_list)), desc = "Probe set"):
+			probe_set = self.probe_set_list[psi]
+			probe_set.export(os.path.join(self.out_path, f"probe_set_{psi}"))
+
 class OligoProbeSet(object):
 	"""docstring for OligoProbeSet"""
 
@@ -1362,11 +974,454 @@ class OligoProbeSet(object):
 			"tm_range", "tm_mean", "tm_std", "score"]
 		return df
 
-	def export(self, path, name):
-		assert os.path.isdir(path)
-		assert_type(name, str, "name")
-		pass
+	def export(self, path):
+		assert not os.path.isfile(path)
+		if os.path.isdir(path):
+			shutil.rmtree(path)
+		os.mkdir(path)
+		
+		self.featDF.to_csv(os.path.join(path, "set.tsv"), "\t", index = False)
+
+		pd.concat([p.featDF for p in self.probe_list]
+			).reset_index(drop = True).to_csv(
+			os.path.join(path, "probes.tsv"), "\t")
+
+		with open(os.path.join(path, "set.bed"), "w+") as BH:
+			for pi in range(len(self.probe_list)):
+				probe = self.probe_list[pi]
+				#probe.export(os.path.join(path, f"probe_{pi}"))
+				for i in range(probe.data.shape[0]):
+					oligo = probe.data.iloc[i]
+					BH.write(f">probe_{pi}:{oligo['name']}" +
+						f":{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n")
+					BH.write(f"{probe.data.iloc[i]['seq']}\n")
+
+
+class GenomicWindowSet(object):
+	"""Genomic window manager."""
+
+	_window_sets = None
+
+	C = "chr18"			# Chromosome
+	S = int(3000000)	# Region start coordinate (included)
+	E = int(3500000)	# Region end coordinate (excluded)
+
+	X = 20				# Number of probes to design
+	Ws = None			# Window size (used when X is not provided)
+	Wh = 0.1			# Window shift (as a percentage of the window size)
+
+	Rs = int(8000)		# Region focus size, either in nt (Rs > 1)
+						#  or fraction of Ws (0<Rs<=1)
+						#  When provided in nt, it is applied only if Rs<Ws
+	Rt = int(1000)		# Region focus step, either in nt (Rt > 1)
+						#  or fraction of Rs (0<Rt<=1),
+						#  for focus region expansion
+
+	def __init__(self):
+		super(GenomicWindowSet, self).__init__()
+
+	@property
+	def window_sets(self):
+		return self._window_sets
 	
+	@window_sets.setter
+	def window_sets(self, window_sets):
+		self._window_sets = pd.DataFrame(np.vstack(window_sets))
+		self._window_sets.columns = [
+			"start", "mid", "end", "cfr_start", "cfr_end", "w", "s"]
+		self._window_sets.sort_values("end", inplace = True)
+		self._window_sets.reset_index(inplace = True)
+
+	@property
+	def wid(self):
+		return self._w
+
+	@property
+	def current_window(self):
+		return self.window_sets.iloc[self.wid, :]
+
+	@property
+	def reached_last_window(self):
+		return self._reached_last_window
+
+	def _assert(self):
+		assert_type(self.C, str, "C")
+		assert_type(self.S, int, "S")
+		assert_nonNeg(self.S, "S")
+		assert_type(self.E, int, "E")
+		assert_nonNeg(self.E, "E")
+		assert self.S < self.E
+
+		assert_multiTypes(self.X, [int, type(None)], "X")
+		assert_type(self.Ws, type(None), "Ws")
+		if isinstance(self.X, int):
+			assert_type(self.Ws, type(None), "Ws")
+			assert_nonNeg(self.X, "X")
+		else:
+			assert_type(self.Ws, int, "Ws")
+
+		assert_multiTypes(self.Ws, [int, type(None)], "Ws")
+		if isinstance(self.Ws, int):
+			assert_type(self.X, type(None), "X")
+			assert_nonNeg(self.Ws, "Ws")
+		else:
+			assert_type(self.X, int, "X")
+
+		assert_type(self.Wh, float, "Wh")
+		assert_inInterv(self.Wh, 0, 1, "Wh")
+
+		assert_multiTypes(self.Rs, [int, float], "Rs")
+		if isinstance(self.Rs, int):
+			assert self.Rs > 1
+		else:
+			assert_inInterv(self.Rs, 0, 1, "Rs")
+
+		assert_multiTypes(self.Rt, [int, float], "Rt")
+		if isinstance(self.Rt, int):
+			assert self.Rt > 1
+		else:
+			assert_inInterv(self.Rt, 0, 1, "Rt")
+
+	def _init_windows(self):
+		# Build windows and central focus regions (CFR)
+		if not os.path.isdir(os.path.join(self.out_path, "window_sets")):
+			os.mkdir(os.path.join(self.out_path, "window_sets"))
+
+		if isinstance(self.X, int):
+			self.Ws = np.floor((self.E-self.S)/(self.X+1)).astype("i")
+
+		window_starts = np.floor(np.arange(self.S,self.E,self.Ws)).astype("i")
+		if 0 != (self.E-self.S)%self.Ws:
+			window_starts = window_starts[:-1]
+
+		window_mids = (window_starts[:-1]+self.Ws/2
+			).reshape((window_starts.shape[0]-1, 1))
+		window_borders = np.transpose(np.vstack(
+			[window_starts[:-1], window_starts[:-1]+self.Ws]))
+
+		nWindows = window_borders.shape[0]
+
+		if isinstance(self.Rs, float):
+			self.Rs = int(self.Rs*self.Ws)
+		if isinstance(self.Rt, float):
+			self.Rt = int(self.Rs*self.Rt)
+		if self.Rs < self.Ws:
+			central_regions = np.hstack([np.floor(window_mids-self.Rs/2),
+				np.floor(window_mids+self.Rs/2)])
+			self.__focus_on_center = True
+		else:
+			nans = np.array([np.nan for x in range(window_mids.shape[0])])
+			central_regions = np.vstack([nans, nans]).transpose()
+			self.__focus_on_center = False
+
+		window_sets = []
+		for i in range(len(np.arange(0, 1, self.Wh))):
+			winID = np.array(range(nWindows)).reshape((nWindows, 1))
+			setID = np.repeat(i, nWindows).reshape((nWindows, 1))
+			window_sets.append(np.hstack([
+				window_borders+i*self.Wh*self.Ws,
+				window_mids+i*self.Wh*self.Ws,
+				central_regions+i*self.Wh*self.Ws,
+				winID, setID])[ :, (0, 2, 1, 3, 4, 5, 6)])
+
+		self._w = 0 # Window ID
+		self._reached_last_window = False
+		self.window_sets = window_sets
+
+	def go_to_next_window(self):
+		if self.wid < self.window_sets.shape[0]-1:
+			self._w += 1
+		if self.wid == self.window_sets.shape[0]-1:
+			self._reached_last_window = True
+
+class OligoWalker(GenomicWindowSet, Loggable):
+	"""OligoWalker walks through the oligos stored in an ifpd2 database,
+	assigns them to windows based on user-defined parameters, and then builds
+	probe candidates."""
+
+	db_path = None
+	out_path = "."
+	reuse = False
+	threads = 40
+
+	__current_oligos = []
+	__walk_results = {}
+
+	def __init__(self, db_path, logger = logging.getLogger()):
+		GenomicWindowSet.__init__(self)
+		Loggable.__init__(self, logger)
+		self.db_path = db_path
+
+	@property
+	def current_oligos(self):
+		return self.__current_oligos
+
+	def remove_oligos_starting_before(self, pos):
+		self.__current_oligos = [o for o in self.current_oligos
+			if o.start >= pos]
+
+	@property
+	def window_set_path(self):
+		return os.path.join(self.out_path, "window_sets",
+			f"set_{int(self.current_window['s'])}")
+
+	@property
+	def window_path(self):
+		return os.path.join(self.window_set_path,
+			f"window_{int(self.current_window['w'])}")
+
+	@property
+	def window_tag(self):
+		window = self.current_window
+		return f"{int(window['s'])}.{int(window['w'])}"
+
+	@property
+	def window_range(self):
+		window = self.current_window
+		return f"[{int(window['start'])}:{int(window['end'])}]"
+
+	@property
+	def walk_results(self):
+		return self.__walk_results
+
+	@property
+	def config(self):
+		config = cp.ConfigParser()
+		config['AIM'] = {
+			'Region' : f"{self.C}:{self.S}-{self.E}",
+			'Probe(s) number' : self.X,
+			#'Oligo(s) number' : self.N,
+			#'Oligo length (nt)' : self.k
+		}
+		config['WINDOWS'] = {
+			'Window size' : self.Ws,
+			'Window step' : self.Wh,
+			'Focus region size' :  self.Rs,
+			'Focus region step' : self.Rt
+		}
+		config['OLIGO FILTERS'] = {
+			#'Off-target threshold' : self.F,
+			#'Secondary structure dG threshold' : self.Gs,
+			#'Oligo score relaxation step' : self.Ot
+		}
+		config['PROBE FILTERS'] = {
+			#'Melting temperature range (degC)' : self.Tr,
+			#'Min. consecutive oligo distance (nt)' : self.D,
+			#'Probe size threshold' : self.Ps,
+			#'Maximum hole size' : self.Ph
+		}
+		return config
+
+	def _assert(self):
+		GenomicWindowSet._assert(self)
+
+		assert os.path.isfile(self.db_path)
+		assert os.path.isdir(self.out_path)
+
+	def start(self, fparse, fimport, fprocess, fpost, *args, **kwargs):
+		self._assert()
+		self._init_windows()
+		self.print_prologue()
+		self.__walk_db(fparse, fimport, fprocess, fpost, *args, **kwargs)
+
+	def print_prologue(self):
+		nWindows = self.window_sets['w'].max().astype('i')+1
+		nSets = self.window_sets["s"].max().astype('i')+1
+
+		s  = f"* OligoWalker *\n\n"
+		s += f"Database: '{self.db_path}'\n"
+		s += f"Region of interest: {self.C}:{self.S}-{self.E}\n"
+		s += f"Aim to scout {nWindows} windows.\n\n"
+
+		s += f"Using a central focus region of {self.Rs} nt,"
+		s += f" in windows of size {self.Ws} nt,\n"
+		s += f"built with a shift of {self.Ws*self.Wh} nt ({self.Wh*100}%).\n"
+		s += f"Thus, a total of {nSets} window sets will be explored.\n"
+
+		self.log.info(s)
+
+	def __walk_db(self, fparse, fimport, fprocess, fpost, *args, **kwargs):
+		if 1 == self.threads:
+			fexec = self.process_window
+		else:
+			pool = mp.Pool(np.min([self.threads, mp.cpu_count()]))
+			self.log.info(f"Prepared a pool of {self.threads} threads.")
+			fexec = lambda *args, **kwargs: pool.apply_async(
+				self.process_window_parallel, args, kwargs)
+		DBH = open(self.db_path, "r")
+		next(DBH)
+
+		self.__preprocess_window(fimport)
+		self.__load_windows_until_next_to_do(fimport)
+		
+		if self.reached_last_window and self.__window_done():
+			self.log.info("All windows pre-processed. Skipped database walk.")
+			return
+
+		self.r = 0 # Record ID
+		self.rw = 0 # Walk step counter
+
+		exec_results = []
+
+		DBHpb = tqdm(DBH, leave = None, desc = "Parsing records")
+		for line in DBHpb:
+			oligo = Oligo(line, self.r)
+
+			if oligo.start >= self.current_window['start']:
+				if oligo.start >= self.current_window['end']:
+					DBHpb.clear()
+					
+					exec_results.append(fexec(self.current_oligos,
+						self.current_window, fprocess, fpost,
+						*args, opath = self.window_path,
+						loggerName = self.log.name, **kwargs))
+
+					if self.reached_last_window:
+						break
+
+					self.go_to_next_window()
+					self.__preprocess_window(fimport)
+					self.__load_windows_until_next_to_do(fimport)
+					if self.reached_last_window and self.__window_done():
+						break
+
+					if 0 != len(self.current_oligos):
+						self.remove_oligos_starting_before(
+							self.current_window['start'])
+
+				if oligo.end > self.E:	# End reached
+					break
+
+				fparse(oligo, *args, **kwargs)
+
+				if not np.isnan(oligo.score):
+					self.current_oligos.append(oligo)
+
+				self.rw += 1
+
+			self.r += 1
+		self.log.info(f"Parsed {self.rw}/{self.r} records.")
+
+		if 1 < self.threads:
+			for promise in exec_results:
+				s, w, results = promise.get()
+				if s in self.walk_results.keys():
+					self.walk_results[s][w] = results
+				else:
+					self.walk_results[s] = {w : results}
+
+		DBH.close()
+		pool.close()
+
+	def __window_done(self):
+		s = int(self.current_window['s'])
+		w = int(self.current_window['w'])
+		if s in self.walk_results.keys():
+			if w in self.walk_results[s].keys():
+				return isinstance(self.walk_results[s][w], list)
+		return False
+
+	def __load_windows_until_next_to_do(self, fimport):
+		while self.__window_done() and not self.reached_last_window:
+			self.go_to_next_window()
+			self.__preprocess_window(fimport)
+
+	def __preprocess_window(self, fimport):
+		# Preprocess current window
+		# Triggers import if previously run and matching current window
+
+		if not os.path.isdir(self.window_set_path):
+			os.mkdir(self.window_set_path)
+			self.window_sets.loc[
+				self.window_sets['s'] == self.current_window['s'],:].to_csv(
+				os.path.join(self.window_set_path, "windows.tsv"), "\t")
+
+		if not os.path.isdir(self.window_path):
+			os.mkdir(self.window_path)
+		else:
+			if not self.reuse:
+				shutil.rmtree(self.window_path)
+				os.mkdir(self.window_path)
+
+			win_file_path = os.path.join(self.window_path, "window.tsv")
+			win_done = os.path.isfile(os.path.join(self.window_path, ".done"))
+
+			if os.path.isfile(win_file_path) and win_done:
+				win = pd.read_csv(win_file_path, sep='\t',
+					header=None, index_col=0)
+
+				if (win.transpose().values == self.current_window.values).all():
+					self.log.info("Re-using previous results for window " +
+						f"{self.window_tag} {self.window_range}")
+
+					sid = int(self.current_window['s'])
+					if not sid in self.walk_results.keys():
+						self.walk_results[sid] = {}
+					wid = int(self.current_window['w'])
+					self.walk_results[sid][wid] = fimport(self.window_path)
+					return
+				else:
+					shutil.rmtree(self.window_path)
+					os.mkdir(self.window_path)
+			else:
+				shutil.rmtree(self.window_path)
+				os.mkdir(self.window_path)
+
+		self.current_window.to_csv(os.path.join(self.window_path, "window.tsv"),
+			sep = "\t", index = True)
+		with open(os.path.join(self.window_path, ".config"), "w+") as CPH:
+			self.config.write(CPH)
+
+	@staticmethod
+	def process_window_parallel(oligos, window, fprocess, fpost, *args,
+		N = 1 , opath = None, loggerName = None, **kwargs):
+		# Wrapper of process_window function, for parallelization
+		window_tag = f"{int(window['s'])}.{int(window['w'])}"
+
+		logFormatter = logging.Formatter(Loggable.defaultfmt,
+			datefmt = Loggable.datefmt)
+		logger = logging.getLogger(f"ifpd2-window-{window_tag}")
+		logger.setLevel(logging.DEBUG)
+		logger = Loggable(logger)
+		logPath = "{0}/{1}.log".format(opath, "window")
+		logger.addFileHandler(logPath)
+		logger.log.info(f"This log is saved at '{logPath}'.")
+
+
+		mainLogger = logging.getLogger(loggerName)
+		mainLogger.info(f"Window {window_tag} sent to pool.")
+		results = OligoWalker.process_window(oligos, window,
+			fprocess, fpost, *args, N = N, opath = opath,
+			loggerName = f"ifpd2-window-{window_tag}", **kwargs)
+		mainLogger.info(f"Processor pool returned window {window_tag}.")
+		return results
+
+	@staticmethod
+	def process_window(oligos, window, fprocess, fpost, *args,
+		N = 1, opath = None, loggerName = None, **kwargs):
+		# Process oligos from window using fprocess. Then, post-process them
+		# with fopost. Requires at least N oligos to proceeed. If opath is
+		# specified, a ".done" file is touched upon successful postprocessing.
+		logger = logging.getLogger(loggerName)
+		kwargs['loggerName'] = loggerName
+
+		if len(oligos) >= N:
+			oGroup = OligoGroup(oligos, logger)
+			logger.info(f"Retrieved {oGroup.data.shape[0]} oligos for" +
+				f" window {int(window['s'])}.{int(window['w'])} " +
+				f"[{int(window['start'])}:{int(window['end'])}]")
+			results = fprocess(oGroup, window, *args, **kwargs)
+		else:
+			logger.warning(f"Window {int(window['s'])}.{int(window['w'])}" +
+				" does not have enough oligos " +
+				f"{len(oligos)}/{N}, skipped.")
+			return
+		
+		status, results = fpost(results, opath, *args, **kwargs)
+		if status and not isinstance(opath, type(None)):
+			Path(os.path.join(opath, ".done")).touch()
+
+		return (int(window['s']), int(window['w']), results)
 
 # FUNCTIONS ====================================================================
 
@@ -1392,6 +1447,33 @@ def assert_inInterv(x, vmin, vmax, label, leftClose = False, rightClose = True):
 		else:
 			assert x > vmin and x < vmax, f"expected {vmin}<{label}<{vmax}"
 
+def fparse(oligo, opb = None, *args, **kwargs):
+	oligo.add_score(opb.F, opb.Gs)
+
+def fprocess(oGroup, window, *args, **kwargs):
+	opb = copy.copy(kwargs['opb'])
+	assert isinstance(opb, OligoProbeBuilder)
+	logger = logging.getLogger(kwargs['loggerName'])
+	probe_list = opb.start(oGroup, window, kwargs['cfr_step'], logger)
+	reduced_probe_list = opb.reduce_probe_list(probe_list, opb.Po)
+	logger.info(f"Reduced from {len(probe_list)} to " +
+		f"{len(reduced_probe_list)} probes.")
+	return reduced_probe_list
+
+def fimport(path, *args, **kwargs):
+	return OligoProbeBuilder.import_probes(path)
+
+def fpost(results, opath, *args, **kwargs):
+	logger = logging.getLogger(kwargs['loggerName'])
+	if 0 == len(results):
+		logger.critical(f"Built {len(results)} oligo probe candidates")
+		logger.handlers = logger.handlers[:-1]
+	else:
+		logger.info(f"Built {len(results)} oligo probe candidates")
+		logger.handlers = logger.handlers[:-1]
+		OligoProbeBuilder.export_probes(results, opath)
+	return (True, results)
+
 # RUN ==========================================================================
 
 if not reuse:
@@ -1413,15 +1495,22 @@ consoleHandler.setLevel(logging.DEBUG)
 logger.addHandler(consoleHandler)
 logger = Loggable(logger)
 
-logPath = "{0}/{1}.log".format(out_path, "ifpd2")
+logPath = "{0}/{1}.log".format(out_path, "ifpd2-main")
 logger.addFileHandler(logPath)
 
 logger.log.info(f"This log is saved at '{logPath}'.")
 
-oWalker = OligoWalker(db_path, logger.log)
-oWalker.out_path = out_path
-oWalker.reuse = reuse
-oWalker.start()
+opb = OligoProbeBuilder()
+opsb = OligoProbeSetBuilder(os.path.join(out_path, "probe_sets"), logger.log)
+logger.log.info(opb.get_prologue())
+
+ow = OligoWalker(db_path, logger.log)
+ow.out_path = out_path
+ow.reuse = reuse
+ow.start(fparse, fimport, fprocess, fpost, opb = opb, cfr_step = ow.Rt)
+
+opsb.build(ow.walk_results)
+opsb.export()
 
 logging.shutdown()
 
