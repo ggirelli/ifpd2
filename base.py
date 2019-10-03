@@ -513,6 +513,309 @@ class OligoProbeBuilder(OligoPathBuilder):
 		probe_paths.columns = ["cs_oligos"]
 		probe_paths.to_csv(os.path.join(opath, "probe_paths.tsv"), "\t")
 
+class OligoGroup(Loggable):
+	"""Allows to select oligos from a group based on a "focus" window of
+	interest. The window can be expanded to the closest oligo or to retain at
+	least a given number of oligos."""
+
+	_focus_window = None		# Left-close, right-open
+	_oligos_in_focus_window = None
+	_oligos_passing_score_filter = None
+
+	def __init__(self, oligos, logger = logging.getLogger()):
+		super(OligoGroup, self).__init__(logger)
+		self._data = pd.concat([o.data for o in oligos], ignore_index = True)
+		self._data = self._data.loc[self._data['score'] <= 1, :]
+		self._oligos_passing_score_filter = self._data['score'].values <= 1
+
+	@property
+	def data(self):
+		return self._data.copy()
+
+	@property
+	def focus_window(self):
+		return self._focus_window
+
+	@focus_window.setter
+	def focus_window(self, focus_window):
+		assert_type(focus_window, tuple, "focus window")
+		assert 2 == len(focus_window)
+		assert focus_window[1] > focus_window[0]
+		self._focus_window = focus_window
+
+	@property
+	def focus_window_repr(self):
+		return f"[{self.focus_window[0]}:{self.focus_window[1]})"
+	
+	@property
+	def focus_window_size(self):
+		return self.focus_window[1] - self.focus_window[0]
+
+	@property
+	def oligos_in_focus_window(self):
+		return self._oligos_in_focus_window
+
+	@property
+	def oligos_passing_score_filter(self):
+		return self._oligos_passing_score_filter
+	
+	@property
+	def usable_oligos(self):
+		if isinstance(self.oligos_in_focus_window, type(None)):
+			return self.oligos_passing_score_filter
+		return np.logical_and(
+			self.oligos_in_focus_window,
+			self.oligos_passing_score_filter)
+	
+	def get_focused_oligos(self, onlyUsable = False):
+		if onlyUsable:
+			return self._data.loc[self.usable_oligos]
+		else:
+			return self._data.loc[self.oligos_in_focus_window, :]
+
+	def get_n_focused_oligos(self, onlyUsable = False):
+		if 0 == self.usable_oligos.sum():
+			return 0
+		return self.get_focused_oligos(onlyUsable).shape[0]
+
+	def focus_all(self):
+		# Use all oligos to define a focus region
+		self.set_focus_window(self._data.loc[:,'start'].min(),
+			self._data.loc[:,'start'].max()+1)
+
+	def set_focus_window(self, start, end, verbose = True):
+		# Set a sub-window of interest to focus on
+		self.focus_window = (start, end)
+
+		start_condition = self._data['start'].values >= self.focus_window[0]
+		end_condition = self._data['end'].values < self.focus_window[1]
+		self._oligos_in_focus_window = np.logical_and(
+			start_condition, end_condition)
+
+		if verbose:
+			nOligos = self.get_n_focused_oligos()
+			nOligosUsable = self.get_n_focused_oligos(True)
+			self.log.info(f"Set focus region to {self.focus_window_repr}" +
+				f" ({nOligos} oligos, {nOligosUsable} usable)")
+
+	def expand_focus_to_n_oligos(self, n, verbose = True):
+		# Expand the sub-window of interest to retrieve at least n oligos
+		assert not isinstance(self.focus_window, type(None))
+		
+		if n <= self.get_n_focused_oligos():
+			return
+		
+		for i in range(n-self.get_n_focused_oligos()):
+			if not self.expand_focus_to_closest():
+				return
+		
+		if verbose:
+			nOligos = self.get_n_focused_oligos()
+			nOligosUsable = self.get_n_focused_oligos(True)
+			self.log.info(f"Expanded focus region to {self.focus_window}" +
+				f" ({nOligos} oligos, {nOligosUsable} usable)")
+
+	def expand_focus_by_step(self, step, verbose = True):
+		# Expand the current focus window of a given step (in nt)
+		assert 0 < step
+
+		if self.focus_window[0] <= self._data['start'].min():
+			if self.focus_window[1] >= self._data['end'].max():
+				self.log.warning("Cannot expand the focus region any further " +
+					"(all oligos already included)")
+				return False
+
+		new_focus_start, new_focus_end = self.focus_window
+		new_focus_start -= step/2
+		new_focus_end += step/2
+		new_focus_start = np.max([new_focus_start, self._data['start'].min()])
+		new_focus_end = np.min([new_focus_end, self._data['end'].max()])
+
+		self.set_focus_window(new_focus_start, new_focus_end, verbose)
+		return True
+
+	def expand_focus_to_closest(self):
+		# Expand the sub-window of interest to add the closest oligo
+		# Return False if not possible (e.g., all oligos already included)
+		if self.get_n_focused_oligos() == self._data.shape[0]:
+			self.log.warning("Cannot expand the focus region any further " +
+				"(all oligos already included)")
+			return False
+
+		earl = self._data['start'].values < self.focus_window[0]
+		if 0 != earl.sum():
+			max_start = self._data.loc[earl, 'start'].max()
+			d_earl = self.focus_window[0] - max_start
+		else:
+			d_earl = np.inf
+
+		late = self._data['end'].values >= self.focus_window[1]
+		if 0 != late.sum():
+			min_end = self._data.loc[late, 'end'].min()
+			d_late = min_end - self.focus_window[1]
+		else:
+			d_late = np.inf
+
+		if np.isinf(d_late):
+			if np.isinf(d_earl):
+				return False
+			else:
+				self.set_focus_window(max_start, self.focus_window[1], False)
+		elif np.isinf(d_earl):
+			self.set_focus_window(self.focus_window[0], min_end+1, False)
+		else:
+			if d_earl <= d_late:
+				self.set_focus_window(max_start, self.focus_window[1], False)
+			else:
+				self.set_focus_window(self.focus_window[0], min_end+1, False)
+
+		return True
+
+	def apply_threshold(self, threshold):
+		# Unfocuses oligos with score higher than the threshold
+		assert threshold <= 1 and threshold >= 0
+		self._oligos_passing_score_filter = self._data['score'] <= threshold
+
+	def reset_threshold(self):
+		self.apply_threshold(1)
+
+	def discard_focused_oligos_safeDist(self, safeDist):
+		# Discard focused oligos that are not within a safe distance from the
+		# CFR borders
+		start = self.data.loc[self.oligos_in_focus_window, "start"].min()
+		end = self.data.loc[self.oligos_in_focus_window, "end"].max()+1
+		self.__discard_oligos_in_range(start+safeDist, end-safeDist)	
+
+	def discard_focused_oligos_safeN(self, safeN, D):
+		# Discard focused oligos that are neither the first nor the last safeN
+		
+		start = self.data.loc[self.oligos_in_focus_window,"start"
+			].values[0] + len(self.data.loc[self.oligos_in_focus_window,"seq"
+			].values[0]) + D
+		end = self.data.loc[self.oligos_in_focus_window,"end"
+			].values[-1] + len(self.data.loc[self.oligos_in_focus_window,"seq"
+			].values[-1]) + D
+
+		oData = self.get_focused_oligos()
+
+		c = 1
+		while c <= safeN:
+			passing_oData = oData.loc[oData['start'] > start, :]
+			if 0 == passing_oData.shape[0]:
+				self.log.info("Not enough oligos, skipped discard step.")
+				return
+			start = passing_oData['start'].values[0] + len(
+				passing_oData['seq'].values[0]) + D
+			c += 1
+
+		c = 1
+		while c <= safeN:
+			passing_oData = oData.loc[oData['end'] <= start]
+			if 0 == passing_oData.shape[-1]:
+				self.log.info("Not enough oligos, skipped discard step.")
+				return
+			end = passing_oData['end'].values[-1] - len(
+				passing_oData['seq'].values[-1]) - D
+			c += 1
+
+		if not self.__discard_oligos_in_range(start, end):
+			self.log.info(f"No oligos to discard in range [{start}:{end}).")
+
+	def __discard_oligos_in_range(self, start, end):
+		if start >= end: return False
+		start_condition = self.data['end'] < start
+		end_condition = self.data['start'] >= end
+		keep_condition = np.logical_or(start_condition, end_condition)
+		nDiscarded = self.oligos_in_focus_window.sum()-keep_condition.sum()
+		self.__apply_keep_condition(keep_condition)
+		self.log.info(f"Discarded {nDiscarded}" +
+			f" oligos from the [{start}:{end}) range.")
+		return True
+
+	def __apply_keep_condition(self, keep_condition):
+		self._data = self._data.loc[keep_condition, :]
+		self._oligos_in_focus_window = self._oligos_in_focus_window[
+			keep_condition]
+		self._oligos_passing_score_filter = self._oligos_passing_score_filter[
+			keep_condition]
+
+class OligoProbe(object):
+	"""Converts a DataFrame of oligo data into an OligoProbe."""
+
+	def __init__(self, oligo_data):
+		super(OligoProbe, self).__init__()
+		self.data = oligo_data
+
+	@property
+	def data(self):
+		return self._data.copy()
+	
+	@data.setter
+	def data(self, oligo_data):
+		assert isinstance(oligo_data, pd.DataFrame)
+		required_columns = ["start", "end", "Tm"]
+		assert all([col in oligo_data.columns for col in required_columns])
+		self._data = oligo_data
+		self._range = (self._data['start'].min(), self._data['end'].max())
+		self._size = self._range[1] - self._range[0]
+		oDists = self._data['start'].values[1:] - self._data['end'].values[:-1]
+		self._spread = np.std(oDists)
+		self._d_range = (oDists.min(), oDists.max())
+		self._d_mean = oDists.mean()
+		self._tm_range = (self._data['Tm'].min(), self._data['Tm'].max())
+
+	@property
+	def n_oligos(self):
+		return self._data.shape[0]
+
+	@property
+	def path(self):
+		return self._data.index
+
+	@property
+	def range(self):
+		return self._range
+
+	@property
+	def tm_range(self):
+		return self._tm_range
+
+	@property
+	def d_range(self):
+		return self._d_range
+
+	@property
+	def d_mean(self):
+		return self._d_mean
+
+	@property
+	def spread(self):
+		return self._spread
+	
+	@property
+	def size(self):
+		return self._size
+
+	@property
+	def featDF(self):
+		df = pd.DataFrame([self.range[0], self.range[1], self.n_oligos,
+			self.size, self.spread,
+			self.d_range[0], self.d_range[1], self.d_mean,
+			np.diff(self.tm_range)[0]]).transpose()
+		df.columns = ["start", "end", "nOligos", "size",
+			"spread", "d_min", "d_max", "d_mean", "tm_range"]
+		return df
+
+	def __repr__(self):
+		rep  = f"<OligoProbe[{self.range[0]}:{self.range[1]}"
+		rep += f":{self.size}:{self.spread}]>"
+		return rep
+
+	def count_shared_oligos(self, probe):
+		# Counts oligos shared with another probe
+		# based on their paths
+		return np.intersect1d(self.path, probe.path).shape[0]
+
 class OligoProbeSetBuilder(Loggable):
 	"""docstring for OligoProbeSetBuilder"""
 
@@ -555,6 +858,102 @@ class OligoProbeSetBuilder(Loggable):
 		pd.concat([ps.featDF for ps in probe_set_candidates]
 			).reset_index(drop = True).to_csv(
 			os.path.join(opath, "probe_set_candidates.tsv"), "\t")
+
+class OligoProbeSet(object):
+	"""docstring for OligoProbeSet"""
+
+	def __init__(self, probe_list):
+		super(OligoProbeSet, self).__init__()
+		self.probe_list = probe_list
+
+	@property
+	def probe_list(self):
+		return self._probe_list
+
+	@probe_list.setter
+	def probe_list(self, probe_list):
+		assert all([isinstance(p, OligoProbe) for p in probe_list])
+		self._probe_list = sorted(probe_list, key = lambda p: p.range[0])
+		self._probe_tm_ranges = [p.tm_range for p in self.probe_list]
+		self._tm_range = (np.min([t[0] for t in self._probe_tm_ranges]),
+			np.max([t[1] for t in self._probe_tm_ranges]))
+		self._sizes = [p.size for p in self.probe_list]
+		self._spreads = [p.spread for p in self.probe_list]
+		self._probe_ranges = [p.range for p in self.probe_list]
+		probe_starts = np.array([r[0] for r in self.probe_ranges])
+		probe_ends = np.array([r[1] for r in self.probe_ranges])
+		self._range = (probe_starts.min(), probe_ends.max())
+		self._ds = probe_starts[1:] - probe_ends[:-1]
+		self._d_mean = np.mean(self.ds)
+		self._d_range = (np.min(self.ds), np.max(self.ds))
+		tm = [p.data['Tm'].tolist() for p in self.probe_list]
+		self._oligo_tm = list(itertools.chain(*tm))
+
+	@property
+	def range(self):
+		return self._range
+
+	@property
+	def probe_ranges(self):
+		return self._probe_ranges
+
+	@property
+	def ds(self):
+		return self._ds
+
+	@property
+	def d_mean(self):
+		return self._d_mean
+
+	@property
+	def d_range(self):
+		return self._d_range
+	
+	@property
+	def tm_range(self):
+		return self._tm_range
+
+	@property
+	def probe_tm_ranges(self):
+		return self._probe_tm_ranges
+	
+	@property
+	def oligo_tm(self):
+		return self._oligo_tm
+	
+	@property
+	def sizes(self):
+		return self._sizes
+
+	@property
+	def spreads(self):
+		return self._spreads
+
+	@property
+	def featDF(self):
+		df = pd.DataFrame([self.range[0], self.range[1],
+			len(self.probe_list), np.diff(self.range)[0],
+			np.mean(self.sizes), np.std(self.sizes),
+			np.min(self.spreads), np.max(self.spreads),
+			np.mean(self.spreads), np.std(self.spreads),
+			self.d_range[0], self.d_range[1], self.d_mean, np.std(self.ds),
+			np.diff(self.tm_range)[0],
+			np.mean(self.oligo_tm), np.std(self.oligo_tm),
+			1/3*(np.std(self.sizes)/np.mean(self.sizes) +
+				np.std(self.spreads)/np.mean(self.spreads) +
+				np.std(self.oligo_tm)/np.mean(self.oligo_tm))
+		]).transpose()
+		df.columns = ["start", "end",
+			"nProbes", "size", "size_mean", "size_std",
+			"spread_min", "spread_max", "spread_mean", "spread_std",
+			"d_min", "d_max", "d_mean", "d_std",
+			"tm_range", "tm_mean", "tm_std", "score"]
+		return df
+
+	def export(self, path, name):
+		assert os.path.isdir(path)
+		assert_type(name, str, "name")
+		pass
 
 class GenomicWindowSet(object):
 	"""Genomic window manager."""
@@ -981,405 +1380,6 @@ class OligoWalker(GenomicWindowSet, Loggable):
 			Path(os.path.join(opath, ".done")).touch()
 
 		return (int(window['s']), int(window['w']), results)
-
-class OligoGroup(Loggable):
-	"""Allows to select oligos from a group based on a "focus" window of
-	interest. The window can be expanded to the closest oligo or to retain at
-	least a given number of oligos."""
-
-	_focus_window = None		# Left-close, right-open
-	_oligos_in_focus_window = None
-	_oligos_passing_score_filter = None
-
-	def __init__(self, oligos, logger = logging.getLogger()):
-		super(OligoGroup, self).__init__(logger)
-		self._data = pd.concat([o.data for o in oligos], ignore_index = True)
-		self._data = self._data.loc[self._data['score'] <= 1, :]
-		self._oligos_passing_score_filter = self._data['score'].values <= 1
-
-	@property
-	def data(self):
-		return self._data.copy()
-
-	@property
-	def focus_window(self):
-		return self._focus_window
-
-	@focus_window.setter
-	def focus_window(self, focus_window):
-		assert_type(focus_window, tuple, "focus window")
-		assert 2 == len(focus_window)
-		assert focus_window[1] > focus_window[0]
-		self._focus_window = focus_window
-
-	@property
-	def focus_window_repr(self):
-		return f"[{self.focus_window[0]}:{self.focus_window[1]})"
-	
-	@property
-	def focus_window_size(self):
-		return self.focus_window[1] - self.focus_window[0]
-
-	@property
-	def oligos_in_focus_window(self):
-		return self._oligos_in_focus_window
-
-	@property
-	def oligos_passing_score_filter(self):
-		return self._oligos_passing_score_filter
-	
-	@property
-	def usable_oligos(self):
-		if isinstance(self.oligos_in_focus_window, type(None)):
-			return self.oligos_passing_score_filter
-		return np.logical_and(
-			self.oligos_in_focus_window,
-			self.oligos_passing_score_filter)
-	
-	def get_focused_oligos(self, onlyUsable = False):
-		if onlyUsable:
-			return self._data.loc[self.usable_oligos]
-		else:
-			return self._data.loc[self.oligos_in_focus_window, :]
-
-	def get_n_focused_oligos(self, onlyUsable = False):
-		if 0 == self.usable_oligos.sum():
-			return 0
-		return self.get_focused_oligos(onlyUsable).shape[0]
-
-	def focus_all(self):
-		# Use all oligos to define a focus region
-		self.set_focus_window(self._data.loc[:,'start'].min(),
-			self._data.loc[:,'start'].max()+1)
-
-	def set_focus_window(self, start, end, verbose = True):
-		# Set a sub-window of interest to focus on
-		self.focus_window = (start, end)
-
-		start_condition = self._data['start'].values >= self.focus_window[0]
-		end_condition = self._data['end'].values < self.focus_window[1]
-		self._oligos_in_focus_window = np.logical_and(
-			start_condition, end_condition)
-
-		if verbose:
-			nOligos = self.get_n_focused_oligos()
-			nOligosUsable = self.get_n_focused_oligos(True)
-			self.log.info(f"Set focus region to {self.focus_window_repr}" +
-				f" ({nOligos} oligos, {nOligosUsable} usable)")
-
-	def expand_focus_to_n_oligos(self, n, verbose = True):
-		# Expand the sub-window of interest to retrieve at least n oligos
-		assert not isinstance(self.focus_window, type(None))
-		
-		if n <= self.get_n_focused_oligos():
-			return
-		
-		for i in range(n-self.get_n_focused_oligos()):
-			if not self.expand_focus_to_closest():
-				return
-		
-		if verbose:
-			nOligos = self.get_n_focused_oligos()
-			nOligosUsable = self.get_n_focused_oligos(True)
-			self.log.info(f"Expanded focus region to {self.focus_window}" +
-				f" ({nOligos} oligos, {nOligosUsable} usable)")
-
-	def expand_focus_by_step(self, step, verbose = True):
-		# Expand the current focus window of a given step (in nt)
-		assert 0 < step
-
-		if self.focus_window[0] <= self._data['start'].min():
-			if self.focus_window[1] >= self._data['end'].max():
-				self.log.warning("Cannot expand the focus region any further " +
-					"(all oligos already included)")
-				return False
-
-		new_focus_start, new_focus_end = self.focus_window
-		new_focus_start -= step/2
-		new_focus_end += step/2
-		new_focus_start = np.max([new_focus_start, self._data['start'].min()])
-		new_focus_end = np.min([new_focus_end, self._data['end'].max()])
-
-		self.set_focus_window(new_focus_start, new_focus_end, verbose)
-		return True
-
-	def expand_focus_to_closest(self):
-		# Expand the sub-window of interest to add the closest oligo
-		# Return False if not possible (e.g., all oligos already included)
-		if self.get_n_focused_oligos() == self._data.shape[0]:
-			self.log.warning("Cannot expand the focus region any further " +
-				"(all oligos already included)")
-			return False
-
-		earl = self._data['start'].values < self.focus_window[0]
-		if 0 != earl.sum():
-			max_start = self._data.loc[earl, 'start'].max()
-			d_earl = self.focus_window[0] - max_start
-		else:
-			d_earl = np.inf
-
-		late = self._data['end'].values >= self.focus_window[1]
-		if 0 != late.sum():
-			min_end = self._data.loc[late, 'end'].min()
-			d_late = min_end - self.focus_window[1]
-		else:
-			d_late = np.inf
-
-		if np.isinf(d_late):
-			if np.isinf(d_earl):
-				return False
-			else:
-				self.set_focus_window(max_start, self.focus_window[1], False)
-		elif np.isinf(d_earl):
-			self.set_focus_window(self.focus_window[0], min_end+1, False)
-		else:
-			if d_earl <= d_late:
-				self.set_focus_window(max_start, self.focus_window[1], False)
-			else:
-				self.set_focus_window(self.focus_window[0], min_end+1, False)
-
-		return True
-
-	def apply_threshold(self, threshold):
-		# Unfocuses oligos with score higher than the threshold
-		assert threshold <= 1 and threshold >= 0
-		self._oligos_passing_score_filter = self._data['score'] <= threshold
-
-	def reset_threshold(self):
-		self.apply_threshold(1)
-
-	def discard_focused_oligos_safeDist(self, safeDist):
-		# Discard focused oligos that are not within a safe distance from the
-		# CFR borders
-		start = self.data.loc[self.oligos_in_focus_window, "start"].min()
-		end = self.data.loc[self.oligos_in_focus_window, "end"].max()+1
-		self.__discard_oligos_in_range(start+safeDist, end-safeDist)	
-
-	def discard_focused_oligos_safeN(self, safeN, D):
-		# Discard focused oligos that are neither the first nor the last safeN
-		
-		start = self.data.loc[self.oligos_in_focus_window,"start"
-			].values[0] + len(self.data.loc[self.oligos_in_focus_window,"seq"
-			].values[0]) + D
-		end = self.data.loc[self.oligos_in_focus_window,"end"
-			].values[-1] + len(self.data.loc[self.oligos_in_focus_window,"seq"
-			].values[-1]) + D
-
-		oData = self.get_focused_oligos()
-
-		c = 1
-		while c <= safeN:
-			passing_oData = oData.loc[oData['start'] > start, :]
-			if 0 == passing_oData.shape[0]:
-				self.log.info("Not enough oligos, skipped discard step.")
-				return
-			start = passing_oData['start'].values[0] + len(
-				passing_oData['seq'].values[0]) + D
-			c += 1
-
-		c = 1
-		while c <= safeN:
-			passing_oData = oData.loc[oData['end'] <= start]
-			if 0 == passing_oData.shape[-1]:
-				self.log.info("Not enough oligos, skipped discard step.")
-				return
-			end = passing_oData['end'].values[-1] - len(
-				passing_oData['seq'].values[-1]) - D
-			c += 1
-
-		if not self.__discard_oligos_in_range(start, end):
-			self.log.info(f"No oligos to discard in range [{start}:{end}).")
-
-	def __discard_oligos_in_range(self, start, end):
-		if start >= end: return False
-		start_condition = self.data['end'] < start
-		end_condition = self.data['start'] >= end
-		keep_condition = np.logical_or(start_condition, end_condition)
-		nDiscarded = self.oligos_in_focus_window.sum()-keep_condition.sum()
-		self.__apply_keep_condition(keep_condition)
-		self.log.info(f"Discarded {nDiscarded}" +
-			f" oligos from the [{start}:{end}) range.")
-		return True
-
-	def __apply_keep_condition(self, keep_condition):
-		self._data = self._data.loc[keep_condition, :]
-		self._oligos_in_focus_window = self._oligos_in_focus_window[
-			keep_condition]
-		self._oligos_passing_score_filter = self._oligos_passing_score_filter[
-			keep_condition]
-
-class OligoProbe(object):
-	"""Converts a DataFrame of oligo data into an OligoProbe."""
-
-	def __init__(self, oligo_data):
-		super(OligoProbe, self).__init__()
-		self.data = oligo_data
-
-	@property
-	def data(self):
-		return self._data.copy()
-	
-	@data.setter
-	def data(self, oligo_data):
-		assert isinstance(oligo_data, pd.DataFrame)
-		required_columns = ["start", "end", "Tm"]
-		assert all([col in oligo_data.columns for col in required_columns])
-		self._data = oligo_data
-		self._range = (self._data['start'].min(), self._data['end'].max())
-		self._size = self._range[1] - self._range[0]
-		oDists = self._data['start'].values[1:] - self._data['end'].values[:-1]
-		self._spread = np.std(oDists)
-		self._d_range = (oDists.min(), oDists.max())
-		self._d_mean = oDists.mean()
-		self._tm_range = (self._data['Tm'].min(), self._data['Tm'].max())
-
-	@property
-	def n_oligos(self):
-		return self._data.shape[0]
-
-	@property
-	def path(self):
-		return self._data.index
-
-	@property
-	def range(self):
-		return self._range
-
-	@property
-	def tm_range(self):
-		return self._tm_range
-
-	@property
-	def d_range(self):
-		return self._d_range
-
-	@property
-	def d_mean(self):
-		return self._d_mean
-
-	@property
-	def spread(self):
-		return self._spread
-	
-	@property
-	def size(self):
-		return self._size
-
-	@property
-	def featDF(self):
-		df = pd.DataFrame([self.range[0], self.range[1], self.n_oligos,
-			self.size, self.spread,
-			self.d_range[0], self.d_range[1], self.d_mean,
-			np.diff(self.tm_range)[0]]).transpose()
-		df.columns = ["start", "end", "nOligos", "size",
-			"spread", "d_min", "d_max", "d_mean", "tm_range"]
-		return df
-
-	def __repr__(self):
-		rep  = f"<OligoProbe[{self.range[0]}:{self.range[1]}"
-		rep += f":{self.size}:{self.spread}]>"
-		return rep
-
-	def count_shared_oligos(self, probe):
-		# Counts oligos shared with another probe
-		# based on their paths
-		return np.intersect1d(self.path, probe.path).shape[0]
-
-class OligoProbeSet(object):
-	"""docstring for OligoProbeSet"""
-
-	def __init__(self, probe_list):
-		super(OligoProbeSet, self).__init__()
-		self.probe_list = probe_list
-
-	@property
-	def probe_list(self):
-		return self._probe_list
-
-	@probe_list.setter
-	def probe_list(self, probe_list):
-		assert all([isinstance(p, OligoProbe) for p in probe_list])
-		self._probe_list = sorted(probe_list, key = lambda p: p.range[0])
-		self._probe_tm_ranges = [p.tm_range for p in self.probe_list]
-		self._tm_range = (np.min([t[0] for t in self._probe_tm_ranges]),
-			np.max([t[1] for t in self._probe_tm_ranges]))
-		self._sizes = [p.size for p in self.probe_list]
-		self._spreads = [p.spread for p in self.probe_list]
-		self._probe_ranges = [p.range for p in self.probe_list]
-		probe_starts = np.array([r[0] for r in self.probe_ranges])
-		probe_ends = np.array([r[1] for r in self.probe_ranges])
-		self._range = (probe_starts.min(), probe_ends.max())
-		self._ds = probe_starts[1:] - probe_ends[:-1]
-		self._d_mean = np.mean(self.ds)
-		self._d_range = (np.min(self.ds), np.max(self.ds))
-		tm = [p.data['Tm'].tolist() for p in self.probe_list]
-		self._oligo_tm = list(itertools.chain(*tm))
-
-	@property
-	def range(self):
-		return self._range
-
-	@property
-	def probe_ranges(self):
-		return self._probe_ranges
-
-	@property
-	def ds(self):
-		return self._ds
-
-	@property
-	def d_mean(self):
-		return self._d_mean
-
-	@property
-	def d_range(self):
-		return self._d_range
-	
-	@property
-	def tm_range(self):
-		return self._tm_range
-
-	@property
-	def probe_tm_ranges(self):
-		return self._probe_tm_ranges
-	
-	@property
-	def oligo_tm(self):
-		return self._oligo_tm
-	
-	@property
-	def sizes(self):
-		return self._sizes
-
-	@property
-	def spreads(self):
-		return self._spreads
-
-	@property
-	def featDF(self):
-		df = pd.DataFrame([self.range[0], self.range[1],
-			len(self.probe_list), np.diff(self.range)[0],
-			np.mean(self.sizes), np.std(self.sizes),
-			np.min(self.spreads), np.max(self.spreads),
-			np.mean(self.spreads), np.std(self.spreads),
-			self.d_range[0], self.d_range[1], self.d_mean, np.std(self.ds),
-			np.diff(self.tm_range)[0],
-			np.mean(self.oligo_tm), np.std(self.oligo_tm),
-			1/3*(np.std(self.sizes)/np.mean(self.sizes) +
-				np.std(self.spreads)/np.mean(self.spreads) +
-				np.std(self.oligo_tm)/np.mean(self.oligo_tm))
-		]).transpose()
-		df.columns = ["start", "end",
-			"nProbes", "size", "size_mean", "size_std",
-			"spread_min", "spread_max", "spread_mean", "spread_std",
-			"d_min", "d_max", "d_mean", "d_std",
-			"tm_range", "tm_mean", "tm_std", "score"]
-		return df
-
-	def export(self, path, name):
-		assert os.path.isdir(path)
-		assert_type(name, str, "name")
-		pass
 
 # FUNCTIONS ====================================================================
 
