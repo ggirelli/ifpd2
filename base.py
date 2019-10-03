@@ -816,19 +816,37 @@ class OligoProbe(object):
 		# based on their paths
 		return np.intersect1d(self.path, probe.path).shape[0]
 
+	def export(self, path):
+		assert not os.path.isfile(path)
+		if os.path.isdir(path):
+			shutil.rmtree(path)
+		os.mkdir(path)
+
+		self.featDF.to_csv(os.path.join(path, "probe.tsv"), "\t", index = False)
+		self.data.to_csv(os.path.join(path, "oligos.tsv"), "\t", index = False)
+
+		with open(os.path.join(path, "probe.bed"), "w+") as BH:
+			for i in range(self.data.shape[0]):
+				oligo = self.data.iloc[i]
+				BH.write(f">{oligo['name']}:" +
+					f"{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n")
+				BH.write(f"{oligo['seq']}\n")
+
 class OligoProbeSetBuilder(Loggable):
 	"""docstring for OligoProbeSetBuilder"""
 
-	def __init__(self, logger = logging.getLogger()):
+	probe_set_list = []
+
+	def __init__(self, out_path, logger = logging.getLogger()):
 		Loggable.__init__(self, logger)
+		assert not os.path.isfile(out_path)
+		self.out_path = out_path
+		if os.path.isdir(out_path):
+			shutil.rmtree(out_path)
+		os.mkdir(out_path)
 
-	def build_probe_set_candidates(self, probe_candidates, opath):
-		if os.path.isdir(opath):
-			shutil.rmtree(opath)
-		os.mkdir(opath)
-
+	def build(self, probe_candidates):
 		nProbes = []
-		probe_set_candidates = []
 		for (wSet, window_list) in probe_candidates.items():
 			probe_set_list = [(p,) for p in list(window_list.values())[0]]
 			#nProbes = [len(probes) for probes in window_list.values()]
@@ -846,18 +864,24 @@ class OligoProbeSetBuilder(Loggable):
 						current_probe_set.append(probe)
 						probe_set_list.append(current_probe_set)
 
-			probe_set_candidates.extend(probe_set_list)
+			self.probe_set_list.extend(probe_set_list)
 			self.log.info(f"Built {len(probe_set_list)} probe set candidates " +
 				f"from window set #{wSet+1}")
 
-		probe_set_candidates = [OligoProbeSet(ps)
-			for ps in probe_set_candidates]
-		self.log.info(f"Built {len(probe_set_candidates)} " +
+		self.probe_set_list = [OligoProbeSet(ps)
+			for ps in self.probe_set_list]
+		self.log.info(f"Built {len(self.probe_set_list)} " +
 			"probe set candidates in total.")
 
-		pd.concat([ps.featDF for ps in probe_set_candidates]
+		pd.concat([ps.featDF for ps in self.probe_set_list]
 			).reset_index(drop = True).to_csv(
-			os.path.join(opath, "probe_set_candidates.tsv"), "\t")
+			os.path.join(self.out_path, "probe_sets.tsv"), "\t")
+
+	def export(self):
+		self.log.info("Exporting probe sets...")
+		for psi in tqdm(range(len(self.probe_set_list)), desc = "Probe set"):
+			probe_set = self.probe_set_list[psi]
+			probe_set.export(os.path.join(self.out_path, f"probe_set_{psi}"))
 
 class OligoProbeSet(object):
 	"""docstring for OligoProbeSet"""
@@ -950,10 +974,28 @@ class OligoProbeSet(object):
 			"tm_range", "tm_mean", "tm_std", "score"]
 		return df
 
-	def export(self, path, name):
-		assert os.path.isdir(path)
-		assert_type(name, str, "name")
-		pass
+	def export(self, path):
+		assert not os.path.isfile(path)
+		if os.path.isdir(path):
+			shutil.rmtree(path)
+		os.mkdir(path)
+		
+		self.featDF.to_csv(os.path.join(path, "set.tsv"), "\t", index = False)
+
+		pd.concat([p.featDF for p in self.probe_list]
+			).reset_index(drop = True).to_csv(
+			os.path.join(path, "probes.tsv"), "\t")
+
+		with open(os.path.join(path, "set.bed"), "w+") as BH:
+			for pi in range(len(self.probe_list)):
+				probe = self.probe_list[pi]
+				#probe.export(os.path.join(path, f"probe_{pi}"))
+				for i in range(probe.data.shape[0]):
+					oligo = probe.data.iloc[i]
+					BH.write(f">probe_{pi}:{oligo['name']}" +
+						f":{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n")
+					BH.write(f"{probe.data.iloc[i]['seq']}\n")
+
 
 class GenomicWindowSet(object):
 	"""Genomic window manager."""
@@ -1459,7 +1501,7 @@ logger.addFileHandler(logPath)
 logger.log.info(f"This log is saved at '{logPath}'.")
 
 opb = OligoProbeBuilder()
-opsb = OligoProbeSetBuilder(logger.log)
+opsb = OligoProbeSetBuilder(os.path.join(out_path, "probe_sets"), logger.log)
 logger.log.info(opb.get_prologue())
 
 ow = OligoWalker(db_path, logger.log)
@@ -1467,8 +1509,8 @@ ow.out_path = out_path
 ow.reuse = reuse
 ow.start(fparse, fimport, fprocess, fpost, opb = opb, cfr_step = ow.Rt)
 
-opsb.build_probe_set_candidates(ow.walk_results,
-	os.path.join(out_path, "probe_sets"))
+opsb.build(ow.walk_results)
+opsb.export()
 
 logging.shutdown()
 
