@@ -10,7 +10,7 @@
 
 # PARAMETERS ===================================================================
 
-out_path = "/mnt/data/COOLFISH/ifpd2_out/test4"
+out_path = "/mnt/data/COOLFISH/ifpd2_out/test"
 db_path = "/mnt/data/COOLFISH/mm10_chr18_selected_regions.tsv"
 reuse = True
 
@@ -59,7 +59,7 @@ class Oligo(object):
 	Presents oligo values as properties."""
 
 	__colnames = ['name', 'chrom', 'start', 'end', 'tm_dG',
-		'dH', 'dS', 'Tm', 'seq', 'nOT', 'k', 'ss_dG']
+		'dH', 'dS', 'Tm', 'seq', 'nOT', 'k', 'ss_dG', 'GC']
 
 	def __init__(self, oligo, i):
 		super(Oligo, self).__init__()
@@ -72,8 +72,6 @@ class Oligo(object):
 			oligo[i] = float(oligo[i])
 		self.data = pd.DataFrame(oligo,
 			columns=[i], index=self.__colnames).transpose()
-		seq = self.data['seq'].values[0]
-		self.data['GC'] = seq.count("G")+seq.count("C")
 
 	@property
 	def start(self):
