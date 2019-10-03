@@ -1414,7 +1414,7 @@ def fprocess(oGroup, window, *args, **kwargs):
 	logger = logging.getLogger(kwargs['loggerName'])
 	probe_list = opb.start(oGroup, window, kwargs['cfr_step'], logger)
 	reduced_probe_list = opb.reduce_probe_list(probe_list, opb.Po)
-	logger.log.info(f"Reduced from {len(probe_list)} to " +
+	logger.info(f"Reduced from {len(probe_list)} to " +
 		f"{len(reduced_probe_list)} probes.")
 	return reduced_probe_list
 
@@ -1423,13 +1423,13 @@ def fimport(path, *args, **kwargs):
 
 def fpost(results, opath, *args, **kwargs):
 	logger = logging.getLogger(kwargs['loggerName'])
-	if 0 == len(probe_list):
-		logger.critical(f"Built {len(probe_list)} oligo probe candidates")
+	if 0 == len(results):
+		logger.critical(f"Built {len(results)} oligo probe candidates")
 		logger.handlers = logger.handlers[:-1]
 	else:
-		logger.info(f"Built {len(probe_list)} oligo probe candidates")
+		logger.info(f"Built {len(results)} oligo probe candidates")
 		logger.handlers = logger.handlers[:-1]
-		OligoProbeBuilder.export_probes(probe_list, opath)
+		OligoProbeBuilder.export_probes(results, opath)
 
 # RUN ==========================================================================
 
