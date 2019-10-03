@@ -98,7 +98,7 @@ def fprocess(oGroup, window, *args, **kwargs):
     assert isinstance(opb, fp.oligo.OligoProbeBuilder)
     logger = logging.getLogger(kwargs['loggerName'])
     probe_list = opb.start(oGroup, window, kwargs['cfr_step'], logger)
-    reduced_probe_list = opb.reduce_probe_list(probe_list, opb.Po)
+    reduced_probe_list = opb.reduce_probe_list(probe_list)
     logger.info(f"Reduced from {len(probe_list)} to " +
         f"{len(reduced_probe_list)} probes.")
     return reduced_probe_list

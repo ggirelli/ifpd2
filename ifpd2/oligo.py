@@ -542,7 +542,7 @@ class OligoPathBuilder(object):
 		# Convert an oligo path into an OligoProbe
 		return OligoProbe(oData.iloc[list(path), :])
 
-	def reduce_probe_list(self, probe_list, thr):
+	def reduce_probe_list(self, probe_list):
 		try:
 			if 0 == len(probe_list): return []
 			sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
@@ -555,7 +555,7 @@ class OligoPathBuilder(object):
 				if probe_ref.n_oligos == n_shared_oligos:
 					raise Exception("Encountered probe duplicates!")
 
-				if thr * self.N <= n_shared_oligos:
+				if self.Po * self.N <= n_shared_oligos:
 					probe_ref = self.select_probe_from_pair(probe_ref, probe)
 				else:
 					selected_probes.append(probe_ref)
@@ -564,7 +564,8 @@ class OligoPathBuilder(object):
 			if not probe_ref in selected_probes:
 				selected_probes.append(probe_ref)
 
-			if thr * self.N > probe_ref.count_shared_oligos(sorted_probes[-1]):
+			n_shared_oligos = probe_ref.count_shared_oligos(sorted_probes[-1])
+			if self.Po * self.N > n_shared_oligos:
 				selected_probes.append(sorted_probes[-1])
 
 			return selected_probes
