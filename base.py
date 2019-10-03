@@ -950,7 +950,7 @@ class OligoWalker(GenomicWindowSet, Loggable):
 		mainLogger = logging.getLogger(loggerName)
 		mainLogger.info(f"Window {window_tag} sent to pool.")
 		results = OligoWalker.process_window(oligos, window,
-			fprocess, fpost, *args, N, opath,
+			fprocess, fpost, *args, N = N, opath = opath,
 			loggerName = f"ifpd2-window-{window_tag}", **kwargs)
 		mainLogger.info(f"Processor pool returned window {window_tag}.")
 		return results
@@ -976,7 +976,7 @@ class OligoWalker(GenomicWindowSet, Loggable):
 				f"{len(oligos)}/{N}, skipped.")
 			return
 		
-		status, results = fpost(results, opath, *args, **kwargs)		
+		status, results = fpost(results, opath, *args, **kwargs)
 		if status and not isinstance(opath, type(None)):
 			Path(os.path.join(opath, ".done")).touch()
 
@@ -1459,12 +1459,16 @@ logger.addFileHandler(logPath)
 logger.log.info(f"This log is saved at '{logPath}'.")
 
 opb = OligoProbeBuilder()
+opsb = OligoProbeSetBuilder()
 logger.log.info(opb.get_prologue())
 
 ow = OligoWalker(db_path, logger.log)
 ow.out_path = out_path
 ow.reuse = reuse
 ow.start(fparse, fimport, fprocess, fpost, opb = opb, cfr_step = ow.Rt)
+
+opsb.build_probe_set_candidates(ow.walk_results,
+	os.path.join(out_path, "probe_sets"))
 
 logging.shutdown()
 
