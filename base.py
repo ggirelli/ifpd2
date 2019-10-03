@@ -1459,7 +1459,7 @@ logger.addFileHandler(logPath)
 logger.log.info(f"This log is saved at '{logPath}'.")
 
 opb = OligoProbeBuilder()
-opsb = OligoProbeSetBuilder()
+opsb = OligoProbeSetBuilder(logger.log)
 logger.log.info(opb.get_prologue())
 
 ow = OligoWalker(db_path, logger.log)
