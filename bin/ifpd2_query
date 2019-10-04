@@ -107,6 +107,7 @@ def fimport(path, *args, **kwargs):
     return OligoProbeBuilder.import_probes(path)
 
 def fpost(results, opath, *args, **kwargs):
+    assert isinstance(kwargs['opb'], fp.oligo.OligoProbeBuilder)
     logger = logging.getLogger(kwargs['loggerName'])
     if 0 == len(results):
         logger.critical(f"Built {len(results)} oligo probe candidates")
@@ -115,6 +116,8 @@ def fpost(results, opath, *args, **kwargs):
         logger.info(f"Built {len(results)} oligo probe candidates")
         logger.handlers = logger.handlers[:-1]
         fp.oligo.OligoProbeBuilder.export_probes(results, opath)
+    with open(os.path.join(opath, "builder.config"), "w+") as CPH:
+            kwargs['opb'].config.write(CPH)
     return (True, results)
 
 # RUN ==========================================================================
