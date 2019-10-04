@@ -559,9 +559,10 @@ class OligoProbeBuilder(OligoPathBuilder):
 	def config(self):
 		config = cp.ConfigParser()
 		config['AIM'] = {
-			'Oligo length (nt)' : self.k,
 			'Oligo(s) number' : self.N
 		}
+		if not isinstance(self.k, type(None)):
+			config['AIM']['Oligo length (nt)'] = self.k
 		config['OLIGO FILTERS'] = {
 			'Off-target threshold' : self.F,
 			'Secondary structure dG threshold' : self.Gs,
@@ -578,7 +579,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 	def _assert(self):
 		OligoPathBuilder._assert(self)
 
-		if not isinstance(k, type(None)):
+		if not isinstance(self.k, type(None)):
 			assert_type(self.k, int, "k")
 			assert_nonNeg(self.k, "k")		
 			assert (self.k+self.D)*self.N <= self.Ps
