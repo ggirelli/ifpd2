@@ -42,7 +42,7 @@ parser.add_argument('-w', metavar = "shift", type = float, default = 0.1,
 parser.add_argument('-R', metavar = "size", type = float, default = 8000,
     help = '''Central focus region size, either in nt or as fraction of window
     size. Default: 8000''')
-parser.add_argument('-r', metavar = "step", type = float, default = 8000,
+parser.add_argument('-r', metavar = "step", type = float, default = 1000,
     help = '''Central focus region step, either in nt or as fraction of central
     focus region size. Default: 1000''')
 
