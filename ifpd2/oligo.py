@@ -542,52 +542,6 @@ class OligoPathBuilder(object):
 		# Convert an oligo path into an OligoProbe
 		return OligoProbe(oData.iloc[list(path), :])
 
-	def reduce_probe_list(self, probe_list):
-		try:
-			if 0 == len(probe_list): return []
-			sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
-
-			selected_probes = []
-			probe_ref = sorted_probes[0]
-			for probe in sorted_probes[1:-1]:
-				n_shared_oligos = probe_ref.count_shared_oligos(probe)
-
-				if probe_ref.n_oligos == n_shared_oligos:
-					raise Exception("Encountered probe duplicates!")
-
-				if self.Po * self.N <= n_shared_oligos:
-					probe_ref = self.select_probe_from_pair(probe_ref, probe)
-				else:
-					selected_probes.append(probe_ref)
-					probe_ref = probe
-
-			if not probe_ref in selected_probes:
-				selected_probes.append(probe_ref)
-
-			n_shared_oligos = probe_ref.count_shared_oligos(sorted_probes[-1])
-			if self.Po * self.N > n_shared_oligos:
-				selected_probes.append(sorted_probes[-1])
-
-			return selected_probes
-		except Exception as e:
-			print(e)
-			raise
-
-	def select_probe_from_pair(self, probeA, probeB):
-		if probeA.size < probeB.size:
-			return probeA
-		else:
-			return probeB
-		if np.diff(probeA.tm_range)[0] < np.diff(probeB.tm_range)[0]:
-			return probeA
-		else:
-			return probeB
-		if probeA.spread/probeA.d_mean < probeB.spread/probeB.d_mean:
-			return probeA
-		else:
-			return probeB
-		return probeA
-
 class OligoProbeBuilder(OligoPathBuilder):
 	"""docstring for OligoProbeBuilder"""
 
@@ -762,6 +716,52 @@ class OligoProbeBuilder(OligoPathBuilder):
 				f"after filtering. ({comment})")
 
 		return self.convert_paths_to_probes(paths, oData)
+
+	def reduce_probe_list(self, probe_list):
+		try:
+			if 0 == len(probe_list): return []
+			sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
+
+			selected_probes = []
+			probe_ref = sorted_probes[0]
+			for probe in sorted_probes[1:-1]:
+				n_shared_oligos = probe_ref.count_shared_oligos(probe)
+
+				if probe_ref.n_oligos == n_shared_oligos:
+					raise Exception("Encountered probe duplicates!")
+
+				if self.Po * self.N <= n_shared_oligos:
+					probe_ref = self.select_probe_from_pair(probe_ref, probe)
+				else:
+					selected_probes.append(probe_ref)
+					probe_ref = probe
+
+			if not probe_ref in selected_probes:
+				selected_probes.append(probe_ref)
+
+			n_shared_oligos = probe_ref.count_shared_oligos(sorted_probes[-1])
+			if self.Po * self.N > n_shared_oligos:
+				selected_probes.append(sorted_probes[-1])
+
+			return selected_probes
+		except Exception as e:
+			print(e)
+			raise
+
+	def select_probe_from_pair(self, probeA, probeB):
+		if probeA.size < probeB.size:
+			return probeA
+		else:
+			return probeB
+		if np.diff(probeA.tm_range)[0] < np.diff(probeB.tm_range)[0]:
+			return probeA
+		else:
+			return probeB
+		if probeA.spread/probeA.d_mean < probeB.spread/probeB.d_mean:
+			return probeA
+		else:
+			return probeB
+		return probeA
 
 	@staticmethod
 	def import_probes(ipath):
