@@ -545,7 +545,7 @@ class OligoPathBuilder(object):
 class OligoProbeBuilder(OligoPathBuilder):
 	"""docstring for OligoProbeBuilder"""
 
-	k = 40
+	k = None
 	F = (0, 100)		# Threshold on number of off-targets (range)
 	Gs = (0.0, 0.5)		# dG of SS either as kcal/mol (negative)
 						#  or as fraction dG of hybrid (0<=Gs<=1)
@@ -578,10 +578,10 @@ class OligoProbeBuilder(OligoPathBuilder):
 	def _assert(self):
 		OligoPathBuilder._assert(self)
 
-		assert_type(self.k, int, "k")
-		assert_nonNeg(self.k, "k")
-		
-		assert (self.k+self.D)*self.N <= self.Ps
+		if not isinstance(k, type(None)):
+			assert_type(self.k, int, "k")
+			assert_nonNeg(self.k, "k")		
+			assert (self.k+self.D)*self.N <= self.Ps
 	
 		assert_type(self.F, tuple, "F")
 		assert 2 == len(self.F)

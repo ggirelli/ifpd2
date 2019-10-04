@@ -70,6 +70,10 @@ parser.add_argument('-I', metavar = "oligos", type = float, default = .5,
     help = '''Probe oligo intersection threshold as shared oligo fraction.
     Default: .5''')
 
+parser.add_argument('-k', metavar = "length", type = int,
+    help = '''Oligo length in nt. This should be used when all oligos in the
+    database have the same length.''')
+
 parser.add_argument('-O', metavar = "outpath", type = str, default = '.',
     help = 'Path to output directory. Default to current folder.')
 
@@ -153,6 +157,7 @@ opb.Tr = args.t
 opb.Ps = args.P
 opb.Ph = args.H
 opb.Po = args.I
+opb.k = args.k
 opb.F = args.F
 opb.Gs = args.G
 opb.Ot = args.o
