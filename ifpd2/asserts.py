@@ -12,8 +12,11 @@ def assert_multiTypes(x, types, label):
 	cond = any([isinstance(x, t) for t in types])
 	assert cond, f"{label} should be one of {types}, {type(x)} instead"
 
-def assert_nonNeg(x, label):
-	assert x > 0, f"{label} should be greater than 0"
+def assert_nonNeg(x, label, include_zero = False):
+	if not include_zero:
+		assert x > 0, f"{label} should be greater than 0"
+	else:
+		assert x >= 0, f"{label} should be greater than or equal to 0"
 
 def assert_inInterv(x, vmin, vmax, label, leftClose = False, rightClose = True):
 	if leftClose:
