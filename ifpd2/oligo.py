@@ -1079,17 +1079,23 @@ class GenomicWindowSet(object):
 		if not os.path.isdir(os.path.join(self.out_path, "window_sets")):
 			os.mkdir(os.path.join(self.out_path, "window_sets"))
 
+
 		if isinstance(self.X, int):
-			self.Ws = np.floor((self.E-self.S)/(self.X+1)).astype("i")
+			if 1 == self.X:
+				self.Ws = self.E - self.S
+			else:
+				self.Ws = np.floor((self.E-self.S)/(self.X+1)).astype("i")
 
 		window_starts = np.floor(np.arange(self.S,self.E,self.Ws)).astype("i")
 		if 0 != (self.E-self.S)%self.Ws:
 			window_starts = window_starts[:-1]
+		if 1 != len(window_starts):
+			window_starts = window_starts[:-1]
 
-		window_mids = (window_starts[:-1]+self.Ws/2
-			).reshape((window_starts.shape[0]-1, 1))
+		window_mids = (window_starts+self.Ws/2
+			).reshape((window_starts.shape[0], 1))
 		window_borders = np.transpose(np.vstack(
-			[window_starts[:-1], window_starts[:-1]+self.Ws]))
+			[window_starts, window_starts+self.Ws]))
 
 		nWindows = window_borders.shape[0]
 
@@ -1212,11 +1218,12 @@ class OligoWalker(GenomicWindowSet, Loggable):
 		self._assert()
 		self._init_windows()
 		self.print_prologue()
+		sys.exit()
 		self.__walk(fparse, fimport, fprocess, fpost, *args, **kwargs)
 
 	def print_prologue(self):
-		nWindows = self.window_sets['w'].max().astype('i')+1
-		nSets = self.window_sets["s"].max().astype('i')+1
+		nWindows = int(self.window_sets['w'].max()+1)
+		nSets = int(self.window_sets["s"].max()+1)
 
 		s  = f"* OligoWalker *\n\n"
 		s += f"Threads: {self.threads}\n"

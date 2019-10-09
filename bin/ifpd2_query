@@ -83,6 +83,10 @@ parser.add_argument('--threads', type = int, default = 1,
 parser.add_argument('--reuse', action = 'store_const',
     dest = 'reuse', const = True, default = False,
     help = 'Avoid overwriting previous database walk, load instead.')
+parser.add_argument('--single', action = 'store_const',
+    dest = 'single', const = True, default = False, help = '''Useful flag for
+    designing single probes. Same as "-X 1 -w 1". It overrides -X and -w, and
+    deactivate -W, if specified.''')
 
 version = "0.0.1"
 parser.add_argument('--version', action = 'version',
@@ -91,6 +95,11 @@ parser.add_argument('--version', action = 'version',
 args = parser.parse_args()
 
 assert not all([isinstance(args.X, type(None)), isinstance(args.W, type(None))])
+
+if args.single:
+    args.X = 1
+    args.w = 1.
+    args.W = None
 
 # FUNCTIONS ====================================================================
 
