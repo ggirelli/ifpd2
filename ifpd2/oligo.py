@@ -979,9 +979,10 @@ class OligoProbeSetBuilder(Loggable):
 		self.log.info(f"Built {len(self.probe_set_list)} " +
 			"probe set candidates in total.")
 
-		pd.concat([ps.featDF for ps in self.probe_set_list]
-			).reset_index(drop = True).to_csv(
-			os.path.join(self.out_path, "probe_sets.tsv"), "\t")
+		if 0 < len(self.probe_set_list):
+			pd.concat([ps.featDF for ps in self.probe_set_list]
+				).reset_index(drop = True).to_csv(
+				os.path.join(self.out_path, "probe_sets.tsv"), "\t")
 
 	def export(self):
 		self.log.info("Exporting probe sets...")
@@ -1008,6 +1009,7 @@ class GenomicWindowSet(object):
 	Rt = int(1000)		# Region focus step, either in nt (Rt > 1)
 						#  or fraction of Rs (0<Rt<=1),
 						#  for focus region expansion
+	_growing = False
 
 	def __init__(self):
 		super(GenomicWindowSet, self).__init__()
@@ -1022,7 +1024,7 @@ class GenomicWindowSet(object):
 		self._window_sets.columns = [
 			"start", "mid", "end", "cfr_start", "cfr_end", "w", "s"]
 		self._window_sets.sort_values("end", inplace = True)
-		self._window_sets.reset_index(inplace = True)
+		self._window_sets.reset_index(inplace = True, drop = True)
 
 	@property
 	def wid(self):
@@ -1036,16 +1038,20 @@ class GenomicWindowSet(object):
 	def reached_last_window(self):
 		return self._reached_last_window
 
+	@property
+	def growing(self):
+		return self._growing
+
 	def _assert(self):
 		assert_type(self.C, str, "C")
 		assert_type(self.S, int, "S")
-		assert_nonNeg(self.S, "S")
+		assert_nonNeg(self.S, "S", True)
 		assert_type(self.E, int, "E")
-		assert_nonNeg(self.E, "E")
-		assert self.S < self.E
+		assert_nonNeg(self.E, "E", True)
+		assert self.S <= self.E
 
 		assert_multiTypes(self.X, [int, type(None)], "X")
-		assert_type(self.Ws, type(None), "Ws")
+		assert_multiTypes(self.Ws, [int, type(None)], "Ws")
 		if isinstance(self.X, int):
 			assert_type(self.Ws, type(None), "Ws")
 			assert_nonNeg(self.X, "X")
@@ -1079,6 +1085,10 @@ class GenomicWindowSet(object):
 		if not os.path.isdir(os.path.join(self.out_path, "window_sets")):
 			os.mkdir(os.path.join(self.out_path, "window_sets"))
 
+		if self.S == self.E:
+			assert_msg = "During full-chromosome search, provide a window size."
+			assert_msg += " I.e., it is not possible to design X probes."
+			assert not isinstance(self.Ws, type(None)), assert_msg
 
 		if isinstance(self.X, int):
 			if 1 == self.X:
@@ -1086,6 +1096,17 @@ class GenomicWindowSet(object):
 			else:
 				self.Ws = np.floor((self.E-self.S)/(self.X+1)).astype("i")
 
+		self._w = 0 # Window ID
+		self._reached_last_window = False
+
+		if self.S == self.E:
+			self._growing = True
+			self.window_sets = self.__mk_first_window()
+		else:
+			self.window_sets = self.__mk_all_window_sets()
+
+	def __mk_all_window_sets(self):
+		# Prepare all window sets in a region of interest
 		window_starts = np.floor(np.arange(self.S,self.E,self.Ws)).astype("i")
 		if 0 != (self.E-self.S)%self.Ws:
 			window_starts = window_starts[:-1]
@@ -1122,15 +1143,54 @@ class GenomicWindowSet(object):
 				central_regions+i*self.Wh*self.Ws,
 				winID, setID])[ :, (0, 2, 1, 3, 4, 5, 6)])
 
-		self._w = 0 # Window ID
-		self._reached_last_window = False
-		self.window_sets = window_sets
+		return window_sets
+
+	def __mk_first_window(self):
+		# Initialize only the first window
+		mid = self.S+self.Ws/2
+		if self.Rs < self.Ws:
+			cstart, cend = (np.floor(mid-self.Rs/2), np.floor(mid+self.Rs/2))
+			self.__focus_on_center = True
+		else:
+			cstart, cend = (np.nan, np.nan)
+			self.__focus_on_center = False
+		return [[self.S, mid, self.S+self.Ws, cstart, cend, 0, 0]]
+
+	def _add_window(self):
+		# Add a window, assigning it to the first set with no overlaps
+		new_window = self.window_sets.iloc[-1, :].copy()
+		new_window.iloc[:5] = new_window.iloc[:5] + self.Wh*self.Ws
+		
+		gData = np.array([(n, g['end'].max())
+			for n,g in self.window_sets.groupby("s")])
+		non_overlapping_group_ids = (np.where(gData[:,1] <= new_window[0])[0])
+
+		new_window_id = 0
+		new_set_id = self.window_sets['s'].max()+1
+		if 0 != len(non_overlapping_group_ids):
+			new_set_id = gData[non_overlapping_group_ids].min()
+			new_window_id = self.window_sets[
+				self.window_sets['s'] == new_set_id]['w'].max()+1
+
+		new_window.iloc[5] = new_window_id
+		new_window.iloc[6] = new_set_id
+		self.window_sets = [self.window_sets.values,
+			new_window.values.reshape((1,7))]
 
 	def go_to_next_window(self):
-		if self.wid < self.window_sets.shape[0]-1:
+		if self._growing:
+			self._add_window()
 			self._w += 1
-		if self.wid == self.window_sets.shape[0]-1:
-			self._reached_last_window = True
+		else:
+			if self.wid < self.window_sets.shape[0]-1:
+				self._w += 1
+			if self.wid >= self.window_sets.shape[0]-1:
+				self._reached_last_window = True
+
+	def export_window_set(self):
+		self.window_sets.loc[
+			self.window_sets['s'] == self.current_window['s'],:].to_csv(
+			os.path.join(self.window_set_path, "windows.tsv"), "\t")
 
 class OligoWalker(GenomicWindowSet, Loggable):
 	"""OligoWalker walks through the oligos stored in an ifpd2 database,
@@ -1196,45 +1256,53 @@ class OligoWalker(GenomicWindowSet, Loggable):
 	@property
 	def config(self):
 		config = cp.ConfigParser()
+
 		config['AIM'] = {
-			'Region' : f"{self.C}:{self.S}-{self.E}",
-			'Probe(s) number' : self.X,
+			'Region' : f"{self.C}:{self.S}-{self.E}"
 		}
-		config['WINDOWS'] = {
-			'Window size' : self.Ws,
-			'Window step' : self.Wh,
-			'Focus region size' :  self.Rs,
-			'Focus region step' : self.Rt
-		}
+		if not isinstance(self.X, type(None)):
+			config['AIM']['Probe(s) number'] = str(self.X)
+
+		config['WINDOWS'] = {}
+		if not isinstance(self.Ws, type(None)):
+			config['WINDOWS']['Window size'] = str(self.Ws)
+		config['WINDOWS'].update({
+			'Window step' : str(self.Wh),
+			'Focus region size' :  str(self.Rs),
+			'Focus region step' : str(self.Rt)
+		})
 		return config
 
 	def _assert(self):
 		GenomicWindowSet._assert(self)
 
-		assert os.path.isfile(self.db_path)
+		assert_msg = f"database not found at {self.db_path}"
+		assert os.path.isfile(self.db_path), assert_msg
 		assert os.path.isdir(self.out_path)
 
 	def start(self, fparse, fimport, fprocess, fpost, *args, **kwargs):
 		self._assert()
 		self._init_windows()
 		self.print_prologue()
-		sys.exit()
 		self.__walk(fparse, fimport, fprocess, fpost, *args, **kwargs)
 
 	def print_prologue(self):
-		nWindows = int(self.window_sets['w'].max()+1)
-		nSets = int(self.window_sets["s"].max()+1)
 
 		s  = f"* OligoWalker *\n\n"
 		s += f"Threads: {self.threads}\n"
 		s += f"Database: '{self.db_path}'\n"
 		s += f"Region of interest: {self.C}:{self.S}-{self.E}\n"
-		s += f"Aim to scout {nWindows} windows.\n\n"
+
+		if not isinstance(self.X, type(None)):
+			nWindows = int(self.window_sets['w'].max()+1)
+			s += f"Aim to scout {nWindows} windows.\n\n"
 
 		s += f"Using a central focus region of {self.Rs} nt,"
 		s += f" in windows of size {self.Ws} nt,\n"
 		s += f"built with a shift of {self.Ws*self.Wh} nt ({self.Wh*100}%).\n"
-		s += f"Thus, a total of {nSets} window sets will be explored.\n"
+		if not isinstance(self.X, type(None)):
+			nSets = int(self.window_sets["s"].max()+1)
+			s += f"Thus, a total of {nSets} window sets will be explored.\n"
 
 		self.log.info(s)
 
@@ -1261,6 +1329,10 @@ class OligoWalker(GenomicWindowSet, Loggable):
 
 		exec_results = []
 
+		walk_destination = self.E
+		if walk_destination == self.S:
+			walk_destination = np.inf
+
 		DBHpb = tqdm(DBH, leave = None, desc = "Parsing records")
 		for line in DBHpb:
 			oligo_start, oligo_end = [int(x)
@@ -1276,19 +1348,22 @@ class OligoWalker(GenomicWindowSet, Loggable):
 						loggerName = self.log.name, **kwargs))
 
 					if self.reached_last_window:
+						self.log.critical("Reached last window")
 						break
 
 					self.go_to_next_window()
 					self.__preprocess_window(fimport)
 					self.__load_windows_until_next_to_do(fimport)
 					if self.reached_last_window and self.__window_done():
+						self.log.critical("Reached last window and done")
 						break
 
 					if 0 != len(self.current_oligos):
 						self.remove_oligos_starting_before(
 							self.current_window['start'])
 
-				if oligo_end > self.E:	# End reached
+				if oligo_end > walk_destination:	# End reached
+					self.log.critical("Reached destination")
 					break
 
 				oligo = Oligo(line, self.r)
@@ -1305,6 +1380,7 @@ class OligoWalker(GenomicWindowSet, Loggable):
 		if 1 < self.threads:
 			for promise in exec_results:
 				s, w, results = promise.get()
+				if 0 == len(results): continue
 				if s in self.walk_results.keys():
 					self.walk_results[s][w] = results
 				else:
@@ -1332,9 +1408,7 @@ class OligoWalker(GenomicWindowSet, Loggable):
 
 		if not os.path.isdir(self.window_set_path):
 			os.mkdir(self.window_set_path)
-			self.window_sets.loc[
-				self.window_sets['s'] == self.current_window['s'],:].to_csv(
-				os.path.join(self.window_set_path, "windows.tsv"), "\t")
+		self.export_window_set()
 
 		if not os.path.isdir(self.window_path):
 			os.mkdir(self.window_path)
@@ -1415,7 +1489,7 @@ class OligoWalker(GenomicWindowSet, Loggable):
 			logger.warning(f"Window {int(window['s'])}.{int(window['w'])}" +
 				" does not have enough oligos " +
 				f"{len(oligos)}/{N}, skipped.")
-			return
+			return (int(window['s']), int(window['w']), [])
 		
 		status, results = fpost(results, opath, *args, **kwargs)
 		if status and not isinstance(opath, type(None)):
