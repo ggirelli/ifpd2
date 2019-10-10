@@ -37,7 +37,9 @@ setup(name='ifpd2',
 		'tqdm>=4.19.8'
 	],
 	scripts=[
-		"bin/ifpd2_query"
+		"bin/ifpd2_query",
+		"bin/ifpd2_mkdb",
+		"bin/ifpd2_dbchk"
 	],
 	test_suite="nose.collector",
 	tests_require=["nose"],

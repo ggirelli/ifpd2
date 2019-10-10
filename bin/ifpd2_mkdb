@@ -1,0 +1,137 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
+# ------------------------------------------------------------------------------
+# 
+# Author: Gabriele Girelli
+# Email: gigi.ga90@gmail.com
+# Date: 2019-10-03
+# 
+# ------------------------------------------------------------------------------
+
+import argparse
+import configparser as cp
+import ifpd2 as fp
+import os
+import struct
+import sys
+from tqdm import tqdm
+
+parser = argparse.ArgumentParser(description = '''
+Lorem ipsum dolor sit amet, consectetur adipisicing elit. Soluta, aspernatur,
+natus. Possimus recusandae distinctio, voluptatem fuga delectus laudantium ut,
+inventore culpa sit amet ullam officiis, tenetur nobis eius vitae dolore.
+''', formatter_class = argparse.RawDescriptionHelpFormatter)
+
+parser.add_argument('dbpath', type = str,
+    help = '''Path to database file.''')
+
+parser.add_argument('-N', metavar = "n", type = int, default = 40,
+    help = '''Maximum number of characters for name field.''')
+parser.add_argument('-c', metavar = "n", type = int, default = 5,
+    help = '''Maximum number of characters for chromosome fields.''')
+parser.add_argument('-k', metavar = "n", type = int, default = 40,
+    help = '''Maximum length of oligo sequences.''')
+
+parser.add_argument('-O', metavar = "opath", type = str, default = None,
+    help = '''Path to output folder.''')
+
+parser.add_argument('--no-check', action = 'store_const',
+    dest = 'doCheck', const = False, default = True,
+    help = 'Skip database check after packing.')
+
+version = "0.0.1"
+parser.add_argument('--version', action = 'version',
+        version = f'{sys.argv[0]} v{version}')
+
+args = parser.parse_args()
+
+# FUNCTIONS ====================================================================
+
+# RUN ==========================================================================
+
+assert os.path.isfile(args.dbpath)
+
+if isinstance(args.O, type(None)):
+    opath = os.path.splitext(args.dbpath)[0]
+else:
+    opath = args.O
+config_path = os.path.join(opath, ".config")
+print(f'''Input: {args.dbpath}
+Output: {opath}
+Name field size: {args.N}
+Chrom field size: {args.c}
+Max oligo length: {args.k}''')
+
+if not os.path.isdir(opath):
+    os.mkdir(opath)
+    config = cp.ConfigParser()
+    config['IFPD2DB'] = {
+        'namelen' : args.N,
+        'chromlen' : args.c,
+        'oligok' : args.k
+    }
+    with open(config_path, "w") as CH:
+        config.write(CH)
+else:
+    assert os.path.isfile(config_path)
+    config = cp.ConfigParser()
+    config.read(config_path)
+    assert config['IFPD2DB'].getint('namelen') == args.N
+    assert config['IFPD2DB'].getint('chromlen') == args.c
+    assert config['IFPD2DB'].getint('oligok') == args.k
+    ans = None
+    question = "\n! IMPORTANT !\nOutput folder already exists.\n"
+    question += "Records will be appended.\nProceed? (yes/no)"
+    print(question)
+    ans = input()
+    while not ans in ['yes', 'no']:
+        print("Answer not recognized.")
+        print(question)
+        ans = input()
+    if ans == 'no': sys.exit("Aborted")
+
+dtype = f"{args.N}s {args.c}s i i f f f f {args.k}s i i f f"
+n_expected_fields = len(dtype.split(" "))
+n_bytes = struct.calcsize(dtype)
+
+with open(args.dbpath, "r") as IH:
+    header = next(IH)
+    if not all([isinstance(s, str) for s in header.split("\t")]):
+        IH.seek(0)
+    for line in tqdm(IH, desc = "Packing database"):
+        oligo = fp.oligo.Oligo(line, 0).data.values[0]
+        chrom = oligo[1]
+        assert len(oligo) == n_expected_fields
+        for fid in range(len(oligo)):
+            if isinstance(oligo[fid], str):
+                oligo[fid] = oligo[fid].encode("utf-8")
+        bs = struct.pack(dtype, *oligo)
+        with open(os.path.join(opath, f"{chrom}.bin"), "ab") as OH:
+            OH.write(bs)
+
+if args.doCheck:
+    for fname in os.listdir(opath):
+        if fname in ['.config']: continue
+        fpath = os.path.join(opath, fname)
+        t = tqdm(desc = f"Checking '{fpath}'", leave = True)
+        with open(fpath, "rb") as IH:
+            line = IH.read(n_bytes)
+            while 0 != len(line):
+                ob = struct.unpack(dtype, line)
+                oligo = []
+                for fid in range(len(ob)):
+                    if isinstance(ob[fid], bytes):
+                        oligo.append(str(ob[fid].decode("utf-8")).rstrip('\x00'))
+                    else:
+                        oligo.append(ob[fid])
+                t.update(1)
+                line = IH.read(n_bytes)
+        t.clear()
+        t.close()
+
+print("All done!")
+
+# END ==========================================================================
+
+################################################################################
