@@ -24,7 +24,9 @@ inventore culpa sit amet ullam officiis, tenetur nobis eius vitae dolore.
 ''', formatter_class = argparse.RawDescriptionHelpFormatter)
 
 parser.add_argument('dbpath', type = str,
-    help = '''Path to database file.''')
+    help = '''Path to non-binary (tsv) database folder.''')
+parser.add_argument('opath', type = str,
+    help = '''Path to output binary database folder.''')
 
 parser.add_argument('-N', metavar = "n", type = int, default = 40,
     help = '''Maximum number of characters for name field.''')
@@ -50,21 +52,19 @@ args = parser.parse_args()
 
 # RUN ==========================================================================
 
-assert os.path.isfile(args.dbpath)
+assert os.path.isdir(args.dbpath)
+flist = [f for f in os.listdir(args.dbpath) if f.endswith(".tsv")]
 
-if isinstance(args.O, type(None)):
-    opath = os.path.splitext(args.dbpath)[0]
-else:
-    opath = args.O
-config_path = os.path.join(opath, ".config")
+config_path = os.path.join(args.opath, ".config")
 print(f'''Input: {args.dbpath}
-Output: {opath}
+Output: {args.opath}
 Name field size: {args.N}
 Chrom field size: {args.c}
-Max oligo length: {args.k}''')
+Max oligo length: {args.k}
+''')
 
-if not os.path.isdir(opath):
-    os.mkdir(opath)
+if not os.path.isdir(args.opath):
+    os.mkdir(args.opath)
     config = cp.ConfigParser()
     config['IFPD2DB'] = {
         'namelen' : args.N,
@@ -91,29 +91,32 @@ else:
         ans = input()
     if ans == 'no': sys.exit("Aborted")
 
-dtype = f"{args.N}s {args.c}s i i f f f f {args.k}s i i f f"
-n_expected_fields = len(dtype.split(" "))
-n_bytes = struct.calcsize(dtype)
+for fname in flist:
+    print(f"> Converting chromosome file '{fname}'...")
+    dtype = f"{args.N}s {args.c}s i i f f f f {args.k}s i i f f"
+    n_expected_fields = len(dtype.split(" "))
+    n_bytes = struct.calcsize(dtype)
 
-with open(args.dbpath, "r") as IH:
-    header = next(IH)
-    if not all([isinstance(s, str) for s in header.split("\t")]):
-        IH.seek(0)
-    for line in tqdm(IH, desc = "Packing database"):
-        oligo = fp.oligo.Oligo(line, 0).data.values[0]
-        chrom = oligo[1]
-        assert len(oligo) == n_expected_fields
-        for fid in range(len(oligo)):
-            if isinstance(oligo[fid], str):
-                oligo[fid] = oligo[fid].encode("utf-8")
-        bs = struct.pack(dtype, *oligo)
-        with open(os.path.join(opath, f"{chrom}.bin"), "ab") as OH:
-            OH.write(bs)
+    with open(os.path.join(args.dbpath, fname), "r") as IH:
+        header = next(IH)
+        if not all([isinstance(s, str) for s in header.split("\t")]):
+            IH.seek(0)
+        for line in tqdm(IH, desc = "Packing database"):
+            oligo = fp.oligo.Oligo(line, 0).data.values[0]
+            chrom = oligo[1]
+            assert len(oligo) == n_expected_fields
+            for fid in range(len(oligo)):
+                if isinstance(oligo[fid], str):
+                    oligo[fid] = oligo[fid].encode("utf-8")
+            bs = struct.pack(dtype, *oligo)
+            with open(os.path.join(args.opath, f"{chrom}.bin"), "ab") as OH:
+                OH.write(bs)
 
 if args.doCheck:
-    for fname in os.listdir(opath):
+    for fname in os.listdir(args.opath):
         if fname in ['.config']: continue
-        fpath = os.path.join(opath, fname)
+        print(f"> Checking binary output file '{fname}'...")
+        fpath = os.path.join(args.opath, fname)
         t = tqdm(desc = f"Checking '{fpath}'", leave = True)
         with open(fpath, "rb") as IH:
             line = IH.read(n_bytes)

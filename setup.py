@@ -38,7 +38,7 @@ setup(name='ifpd2',
 	],
 	scripts=[
 		"bin/ifpd2_query",
-		"bin/ifpd2_mkdb",
+		"bin/ifpd2_mkbindb",
 		"bin/ifpd2_dbchk"
 	],
 	test_suite="nose.collector",

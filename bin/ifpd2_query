@@ -85,6 +85,9 @@ parser.add_argument('--region-regexp', metavar = "re", type = str,
     Remember to use quotes. Default:
     "^(?P<chrom>[a-zA-Z0-9]+):(?P<start>[0-9]*)-(?P<end>[0-9]*)$"''')
 
+parser.add_argument('--non-binary', action = 'store_const',
+    dest = 'binDB', const = False, default = True,
+    help = 'When the database was not binarized.')
 parser.add_argument('--reuse', action = 'store_const',
     dest = 'reuse', const = True, default = False,
     help = 'Avoid overwriting previous database walk, load instead.')
@@ -197,7 +200,10 @@ opsb = fp.oligo.OligoProbeSetBuilder(os.path.join(
     args.O, "probe_sets"), logger.log)
 logger.log.info(opb.get_prologue())
 
-ow = fp.oligo.OligoWalker(args.dbpath, logger.log)
+if args.binDB:
+    ow = fp.database.WalkerBinary(args.dbpath, logger.log)
+else:
+    ow = fp.database.Walker(args.dbpath, logger.log)
 ow.C = args.chrom
 ow.S = args.start
 ow.E = args.end
