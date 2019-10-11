@@ -82,16 +82,16 @@ class Oligo(object):
 		norm_nOT = self.__norm_value_in_range(nOT, F)
 
 		ss_dG = self.data['ss_dG'].values
-		if isinstance(Gs[0], int):
+		if all([x >= 0 for x in Gs[0]]):
+			tm_dG = self.data['tm_dG'].values
+			if ss_dG >= tm_dG*min(Gs): score = 0
+			if ss_dG < tm_dG*max(Gs): score = np.inf
+			norm_ss_dG = self.__norm_value_in_range(ss_dG,
+				[tm_dG*f for f in Gs])
+		else:
 			if ss_dG >= Gs[0]: score = 0
 			if ss_dG < Gs[1]: score = np.inf
 			norm_ss_dG = self.__norm_value_in_range(ss_dG, Gs)
-		else:
-			tm_dG = self.data['tm_dG'].values
-			if ss_dG >= tm_dG*Gs[0]: score = 0
-			if ss_dG < tm_dG*Gs[1]: score = np.inf
-			norm_ss_dG = self.__norm_value_in_range(ss_dG,
-				[tm_dG*f for f in Gs])
 		self.data['score'] = np.mean([norm_nOT, norm_ss_dG])
 
 class OligoBinary(Oligo):
