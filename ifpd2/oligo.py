@@ -82,7 +82,7 @@ class Oligo(object):
 		norm_nOT = self.__norm_value_in_range(nOT, F)
 
 		ss_dG = self.data['ss_dG'].values
-		if all([x >= 0 for x in Gs[0]]):
+		if all([x >= 0 for x in Gs]):
 			tm_dG = self.data['tm_dG'].values
 			if ss_dG >= tm_dG*min(Gs): score = 0
 			if ss_dG < tm_dG*max(Gs): score = np.inf
@@ -592,7 +592,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 			'Oligo(s) number' : self.N
 		}
 		if not isinstance(self.k, type(None)):
-			config['AIM']['Oligo length (nt)'] = self.k
+			config['AIM']['Oligo length (nt)'] = str(self.k)
 		config['OLIGO FILTERS'] = {
 			'Off-target threshold' : self.F,
 			'Secondary structure dG threshold' : self.Gs,

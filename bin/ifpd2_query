@@ -120,6 +120,9 @@ else:
     args.start = int(args.start)
     args.end = int(args.end)
 
+if args.R > 1: args.R = int(args.R)
+if args.r > 1: args.r = int(args.r)
+
 if args.single:
     args.X = 1
     args.w = 1.
@@ -193,7 +196,7 @@ opb.Ph = args.H
 opb.Po = args.I
 opb.k = args.k
 opb.F = args.F
-opb.Gs = args.G
+opb.Gs = tuple(args.G)
 opb.Ot = args.o
 
 opsb = fp.oligo.OligoProbeSetBuilder(os.path.join(
