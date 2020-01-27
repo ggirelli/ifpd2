@@ -35,9 +35,6 @@ parser.add_argument('-c', metavar = "n", type = int, default = 5,
 parser.add_argument('-k', metavar = "n", type = int, default = 40,
     help = '''Maximum length of oligo sequences.''')
 
-parser.add_argument('-O', metavar = "opath", type = str, default = None,
-    help = '''Path to output folder.''')
-
 parser.add_argument('--no-check', action = 'store_const',
     dest = 'doCheck', const = False, default = True,
     help = 'Skip database check after packing.')
