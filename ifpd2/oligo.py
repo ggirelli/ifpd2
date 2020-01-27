@@ -423,7 +423,7 @@ class OligoProbe(object):
 		self.featDF.to_csv(os.path.join(path, "probe.tsv"), "\t", index = False)
 		self.data.to_csv(os.path.join(path, "oligos.tsv"), "\t", index = False)
 
-		with open(os.path.join(path, "probe.bed"), "w+") as BH:
+		with open(os.path.join(path, "probe.fa"), "w+") as BH:
 			for i in range(self.data.shape[0]):
 				oligo = self.data.iloc[i]
 				BH.write(f">{oligo['name']}:" +
