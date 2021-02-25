@@ -120,8 +120,12 @@ class OligoProbe(object):
             for i in range(self.data.shape[0]):
                 oligo = self.data.iloc[i]
                 BH.write(
-                    f">{oligo['name']}:"
-                    + f"{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n"
+                    "".join(
+                        [
+                            f">{oligo['name']}:",
+                            f"{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n",
+                        ]
+                    )
                 )
                 BH.write(f"{oligo['seq']}\n")
 
@@ -406,8 +410,12 @@ class OligoProbeBuilder(OligoPathBuilder):
                 continue
 
             logger.info(
-                f"Relaxed oligo score threshold to {score_thr:.3f}"
-                + f" ({nOligosUsable} oligos usable)..."
+                " ".join(
+                    [
+                        f"Relaxed oligo score threshold to {score_thr:.3f}",
+                        f"({nOligosUsable} oligos usable)...",
+                    ]
+                )
             )
             probe_list = self.__get_non_overlapping_probes(
                 oGroup.get_focused_oligos(True), logger
@@ -425,8 +433,12 @@ class OligoProbeBuilder(OligoPathBuilder):
         if oGroup.focus_window_size < self.Ps:
             max_score = 0
             logger.warning(
-                "Score relaxation deactivated when focus region"
-                + " size is smaller than probe size threshold."
+                " ".join(
+                    [
+                        "Score relaxation deactivated when focus region",
+                        "size is smaller than probe size threshold.",
+                    ]
+                )
             )
         else:
             max_score = 1
@@ -435,8 +447,12 @@ class OligoProbeBuilder(OligoPathBuilder):
         oGroup.apply_threshold(score_thr)
         nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
         logger.info(
-            f"Set oligo score threshold at {score_thr:.3f}"
-            + f" ({nOligos_prev_score_thr} oligos usable)..."
+            " ".join(
+                [
+                    f"Set oligo score threshold at {score_thr:.3f}",
+                    f"({nOligos_prev_score_thr} oligos usable)...",
+                ]
+            )
         )
 
         if 0 == max_score and 0 == nOligos_prev_score_thr:
@@ -447,8 +463,12 @@ class OligoProbeBuilder(OligoPathBuilder):
             oGroup.apply_threshold(score_thr)
             nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
             logger.info(
-                f"Relaxed oligo score threshold to {score_thr:.3f}"
-                + f" ({nOligos_prev_score_thr} oligos usable)..."
+                " ".join(
+                    [
+                        f"Relaxed oligo score threshold to {score_thr:.3f}",
+                        f"({nOligos_prev_score_thr} oligos usable)...",
+                    ]
+                )
             )
 
         return self.__build_probe_list(
@@ -483,8 +503,12 @@ class OligoProbeBuilder(OligoPathBuilder):
         paths, comment = self.filter_paths(paths, oData)
         if verbosity:
             logger.info(
-                f"{len(paths)}/{nPaths} oligo paths remaining "
-                + f"after filtering. ({comment})"
+                " ".join(
+                    [
+                        f"{len(paths)}/{nPaths} oligo paths remaining",
+                        f"after filtering. ({comment})",
+                    ]
+                )
             )
 
         return self.convert_paths_to_probes(paths, oData)

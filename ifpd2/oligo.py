@@ -206,8 +206,12 @@ class OligoGroup(object):
             nOligos = self.get_n_focused_oligos()
             nOligosUsable = self.get_n_focused_oligos(True)
             logging.info(
-                f"Set focus region to {self.focus_window_repr}"
-                + f" ({nOligos} oligos, {nOligosUsable} usable)"
+                " ".join(
+                    [
+                        f"Set focus region to {self.focus_window_repr}",
+                        f"({nOligos} oligos, {nOligosUsable} usable)",
+                    ]
+                )
             )
 
     def expand_focus_to_n_oligos(self, n, verbose=True):
@@ -225,8 +229,12 @@ class OligoGroup(object):
             nOligos = self.get_n_focused_oligos()
             nOligosUsable = self.get_n_focused_oligos(True)
             logging.info(
-                f"Expanded focus region to {self.focus_window}"
-                + f" ({nOligos} oligos, {nOligosUsable} usable)"
+                " ".join(
+                    [
+                        f"Expanded focus region to {self.focus_window}",
+                        f" ({nOligos} oligos, {nOligosUsable} usable)",
+                    ]
+                )
             )
 
     def expand_focus_by_step(self, step, verbose=True):
@@ -236,8 +244,12 @@ class OligoGroup(object):
         if self.focus_window[0] <= self._data["start"].min():
             if self.focus_window[1] >= self._data["end"].max():
                 logging.warning(
-                    "Cannot expand the focus region any further "
-                    + "(all oligos already included)"
+                    " ".join(
+                        [
+                            "Cannot expand the focus region any further ",
+                            "(all oligos already included)",
+                        ]
+                    )
                 )
                 return False
 
@@ -279,8 +291,12 @@ class OligoGroup(object):
         # Return False if not possible (e.g., all oligos already included)
         if self.get_n_focused_oligos() == self._data.shape[0]:
             logging.warning(
-                "Cannot expand the focus region any further "
-                + "(all oligos already included)"
+                " ".join(
+                    [
+                        "Cannot expand the focus region any further",
+                        "(all oligos already included)",
+                    ]
+                )
             )
             return False
 
@@ -323,11 +339,8 @@ class OligoGroup(object):
             if 0 == passing_oData.shape[0]:
                 logging.info("Not enough oligos, skipped discard step.")
                 return False
-            start = (
-                passing_oData["start"].values[0]
-                + len(passing_oData["seq"].values[0])
-                + D
-            )
+            start = passing_oData["start"].values[0]
+            start += len(passing_oData["seq"].values[0]) + D
             c += 1
 
         c = 1
@@ -336,11 +349,8 @@ class OligoGroup(object):
             if 0 == passing_oData.shape[-1]:
                 logging.info("Not enough oligos, skipped discard step.")
                 return False
-            end = (
-                passing_oData["end"].values[-1]
-                - len(passing_oData["seq"].values[-1])
-                - D
-            )
+            end = passing_oData["end"].values[-1]
+            end -= len(passing_oData["seq"].values[-1]) - D
             c += 1
 
         return True
@@ -348,16 +358,10 @@ class OligoGroup(object):
     def discard_focused_oligos_safeN(self, safeN, D):
         # Discard focused oligos that are neither the first nor the last safeN
 
-        start = (
-            self.data.loc[self.oligos_in_focus_window, "start"].values[0]
-            + len(self.data.loc[self.oligos_in_focus_window, "seq"].values[0])
-            + D
-        )
-        end = (
-            self.data.loc[self.oligos_in_focus_window, "end"].values[-1]
-            + len(self.data.loc[self.oligos_in_focus_window, "seq"].values[-1])
-            + D
-        )
+        start = self.data.loc[self.oligos_in_focus_window, "start"].values[0]
+        start += len(self.data.loc[self.oligos_in_focus_window, "seq"].values[0]) + D
+        end = self.data.loc[self.oligos_in_focus_window, "end"].values[-1]
+        end += len(self.data.loc[self.oligos_in_focus_window, "seq"].values[-1]) + D
 
         if not self.__check_oligos_to_discard_safeN(safeN, start, end, D):
             return
