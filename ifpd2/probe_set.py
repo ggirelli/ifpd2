@@ -8,7 +8,7 @@ import logging
 import numpy as np  # type: ignore
 import os
 import pandas as pd  # type: ignore
-from rich.progress import track
+from rich.progress import track  # type: ignore
 import shutil
 from typing import List
 
