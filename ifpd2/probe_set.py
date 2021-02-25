@@ -41,7 +41,10 @@ class OligoProbeSet(object):
         probe_starts = np.array([r[0] for r in self.probe_ranges])
         probe_ends = np.array([r[1] for r in self.probe_ranges])
         self._range = (probe_starts.min(), probe_ends.max())
-        self._ds = probe_starts[1:] - probe_ends[:-1]
+        if 1 == len(probe_list):
+            self._ds = 0
+        else:
+            self._ds = probe_starts[1:] - probe_ends[:-1]
         self._d_mean = np.mean(self.ds)
         self._d_range = (np.min(self.ds), np.max(self.ds))
         tm = [p.data["Tm"].tolist() for p in self.probe_list]
@@ -197,6 +200,8 @@ class OligoProbeSetBuilder(object):
                     current_probe_set = list(probe_set)
                     current_probe_set.append(probe)
                     probe_set_list.append(current_probe_set)
+
+        return probe_set_list
 
     def build(self, probe_candidates):
         for (wSet, window_list) in probe_candidates.items():

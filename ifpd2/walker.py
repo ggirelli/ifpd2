@@ -430,9 +430,9 @@ class Walker(GenomicWindowSet):
                     self.current_oligos.append(oligo)
 
                 self.rw += 1
-                return (None, "continue")
             else:
                 return (parsing_output, parsing_status)
+        return (None, "continue")
 
     def __queue_process(self, queue, process):
         if 1 == self._threads:
@@ -455,19 +455,21 @@ class Walker(GenomicWindowSet):
                 exec_results = self.__queue_process(exec_results, parsing_output)
             self.r += 1
 
-        return self.__queue_process(
-            exec_results,
-            self.__process_window_async(
-                self.current_oligos,
-                self.current_window,
-                self.fprocess,
-                self.fpost,
-                *args,
-                opath=self.window_path,
-                loggerName=self.logger.name,
-                **kwargs,
-            ),
-        )
+        if 0 != len(self.current_oligos):
+            exec_results = self.__queue_process(
+                exec_results,
+                self.__process_window_async(
+                    self.current_oligos,
+                    self.current_window,
+                    self.fprocess,
+                    self.fpost,
+                    *args,
+                    opath=self.window_path,
+                    loggerName=self.logger.name,
+                    **kwargs,
+                ),
+            )
+        return exec_results
 
     def __end_walk(self, exec_results):
         if 1 < self.threads:
@@ -476,9 +478,9 @@ class Walker(GenomicWindowSet):
                 if 0 == len(results):
                     continue
                 if s in self.walk_results.keys():
-                    self.walk_results[s][w] = results
+                    self.__walk_results[s][w] = results
                 else:
-                    self.walk_results[s] = {w: results}
+                    self.__walk_results[s] = {w: results}
 
     def __start_walk(self, *args, **kwargs):
         self.pool = mp.Pool(np.min([self.threads, mp.cpu_count()]))
@@ -535,9 +537,9 @@ class Walker(GenomicWindowSet):
 
                 sid = int(self.current_window["s"])
                 if sid not in self.walk_results.keys():
-                    self.walk_results[sid] = {}
+                    self.__walk_results[sid] = {}
                 wid = int(self.current_window["w"])
-                self.walk_results[sid][wid] = self.fimport(self.window_path)
+                self.__walk_results[sid][wid] = self.fimport(self.window_path)
                 return
             else:
                 shutil.rmtree(self.window_path)
