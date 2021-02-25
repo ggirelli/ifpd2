@@ -4,31 +4,17 @@
 """
 
 import logging
+from rich.logging import RichHandler  # type: ignore
+from rich.console import Console  # type: ignore
+import os
+from typing import Optional
 
 
-class Loggable(object):
-    """Shows logger instance to children classes."""
-
-    defaultfmt = "%(asctime)s %(levelname)s:\t%(message)s"
-    datefmt = "%d/%m/%Y %H:%M:%S"
-
-    def __init__(
-        self,
-        logger=logging.getLogger(),
-        formatter=logging.Formatter(
-            "%(asctime)s %(levelname)s:\t%(message)s", datefmt="%d/%m/%Y %H:%M:%S"
-        ),
-    ):
-        super(Loggable, self).__init__()
-        self._logger = logger
-        self._formatter = formatter
-
-    @property
-    def log(self):
-        return self._logger
-
-    def addFileHandler(self, path, mode="w+", level=logging.DEBUG):
-        fileHandler = logging.FileHandler(path, mode)
-        fileHandler.setFormatter(self._formatter)
-        fileHandler.setLevel(level)
-        self.log.addHandler(fileHandler)
+def add_log_file_handler(path: str, logger_name: Optional[str] = None) -> None:
+    assert not os.path.isdir(path)
+    log_dir = os.path.dirname(path)
+    assert os.path.isdir(log_dir) or "" == log_dir
+    fh = RichHandler(console=Console(file=open(path, mode="w+")), markup=True)
+    fh.setLevel(logging.INFO)
+    logging.getLogger(logger_name).addHandler(fh)
+    logging.info(f"[green]Log to[/]: '{path}'")

@@ -1,85 +1,41 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
-# ------------------------------------------------------------------------------
-#
-# Author: Gabriele Girelli
-# Email: gigi.ga90@gmail.com
-# Date: 2019-10-03
-#
-# ------------------------------------------------------------------------------
+"""
+@author: Gabriele Girelli
+@contact: gigi.ga90@gmail.com
+"""
 
 import argparse
-import configparser as cp
-import ifpd2 as fp
+from ifpd2.asserts import enable_rich_assert
+from ifpd2.scripts import arguments as ap
 import os
-import struct
-import sys
-import time
-from tqdm import tqdm
 
-parser = argparse.ArgumentParser(
-    description="""
+
+def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser(
+        __name__.split(".")[-1],
+        description="""
 Lorem ipsum dolor sit amet, consectetur adipisicing elit. Soluta, aspernatur,
 natus. Possimus recusandae distinctio, voluptatem fuga delectus laudantium ut,
 inventore culpa sit amet ullam officiis, tenetur nobis eius vitae dolore.
 """,
-    formatter_class=argparse.RawDescriptionHelpFormatter,
-)
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        help="Check integrity of a database.",
+    )
 
-parser.add_argument("dbpath", type=str, help="""Path to database folder.""")
+    parser.add_argument(
+        "database", metavar="database", type=str, help="Path to database folder."
+    )
+    parser = ap.add_version_option(parser)
+    parser.set_defaults(parse=parse_arguments, run=run)
 
-version = "0.0.1"
-parser.add_argument("--version", action="version", version=f"{sys.argv[0]} v{version}")
+    return parser
 
-args = parser.parse_args()
 
-# FUNCTIONS ====================================================================
+@enable_rich_assert
+def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
+    assert os.path.isdir(args.database), f"database folder not found: {args.database}"
+    return args
 
-# RUN ==========================================================================
 
-assert os.path.isdir(args.dbpath)
-config_path = os.path.join(args.dbpath, ".config")
-assert os.path.isfile(config_path)
-config = cp.ConfigParser()
-config.read(config_path)
-args.N = config["IFPD2DB"].getint("namelen")
-args.c = config["IFPD2DB"].getint("chromlen")
-args.k = config["IFPD2DB"].getint("oligok")
-
-print(
-    f"""Database: {args.dbpath}
-Name field size: {args.N}
-Chrom field size: {args.c}
-Max oligo length: {args.k}"""
-)
-
-dtype = f"{args.N}s {args.c}s i i f f f f {args.k}s i i f f"
-n_expected_fields = len(dtype.split(" "))
-n_bytes = struct.calcsize(dtype)
-
-for fname in os.listdir(args.dbpath):
-    if fname in [".config"]:
-        continue
-    fpath = os.path.join(args.dbpath, fname)
-    t = tqdm(desc=f"Checking '{fpath}'", leave=True)
-    with open(fpath, "rb") as IH:
-        line = IH.read(n_bytes)
-        while 0 != len(line):
-            ob = struct.unpack(dtype, line)
-            oligo = []
-            for fid in range(len(ob)):
-                if isinstance(ob[fid], bytes):
-                    oligo.append(str(ob[fid].decode("utf-8")).rstrip("\x00"))
-                else:
-                    oligo.append(ob[fid])
-            t.update(1)
-            line = IH.read(n_bytes)
-    t.clear()
-    t.close()
-
-print("All good!")
-
-# END ==========================================================================
-
-################################################################################
+@enable_rich_assert
+def run(args: argparse.Namespace) -> None:
+    raise NotImplementedError

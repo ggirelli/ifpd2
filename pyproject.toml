@@ -35,4 +35,4 @@ requires = ["poetry>=0.12"]
 build-backend = "poetry.masonry.api"
 
 [tool.poetry.scripts]
-"ifpd2" = "ifpd2.scripts.ifpd:main"
+"ifpd2" = "ifpd2.scripts.ifpd2:main"

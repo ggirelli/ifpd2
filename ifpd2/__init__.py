@@ -4,7 +4,16 @@
 """
 
 from ifpd2.const import __version__
-from ifpd2 import asserts, logging
-from ifpd2 import database, oligo
+from ifpd2 import asserts
+from ifpd2 import database, walker
+from ifpd2 import oligo, probe, probe_set
 
-__all__ = ["__version__", "asserts", "logging", "database", "oligo"]
+__all__ = [
+    "__version__",
+    "asserts",
+    "database",
+    "walker",
+    "oligo",
+    "probe",
+    "probe_set",
+]

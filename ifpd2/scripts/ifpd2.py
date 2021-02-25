@@ -11,7 +11,7 @@ import sys
 
 
 def default_parser(*args) -> None:
-    print("ifpd -h for usage details.")
+    print("ifpd2 -h for usage details.")
     sys.exit()
 
 

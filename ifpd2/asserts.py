@@ -3,6 +3,10 @@
 @contact: gigi.ga90@gmail.com
 """
 
+import logging
+import sys
+from typing import Callable
+
 
 def ert_type(x, stype, label):
     assert isinstance(x, stype), f"{label} should be {stype}, {type(x)} instead"
@@ -31,3 +35,14 @@ def ert_inInterv(x, vmin, vmax, label, leftClose=False, rightClose=True):
             assert x > vmin and x <= vmax, f"expected {vmin}<{label}<={vmax}"
         else:
             assert x > vmin and x < vmax, f"expected {vmin}<{label}<{vmax}"
+
+
+def enable_rich_assert(fun: Callable) -> Callable:
+    def wrapper(*args, **kwargs):
+        try:
+            return fun(*args, **kwargs)
+        except AssertionError as e:
+            logging.exception(e)
+            sys.exit()
+
+    return wrapper
