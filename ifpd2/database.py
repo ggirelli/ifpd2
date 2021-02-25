@@ -1,22 +1,22 @@
 """
 @author: Gabriele Girelli
 @contact: gigi.ga90@gmail.com
-@description: methods for oligo database management.
 """
 
 import configparser as cp
 import logging
 import multiprocessing as mp
-import numpy as np
+import numpy as np  # type: ignore
 import os
-import pandas as pd
+import pandas as pd  # type: ignore
 from pathlib import Path
 import shutil
 import struct
-from tqdm import tqdm
+from tqdm import tqdm  # type: ignore
+from typing import Dict, List
 
 from ifpd2.logging import Loggable
-from ifpd2.asserts import *
+from ifpd2 import asserts as ass
 from ifpd2.oligo import Oligo, OligoBinary, OligoGroup
 
 
@@ -163,42 +163,42 @@ class GenomicWindowSet(object):
         return self._growing
 
     def _assert(self):
-        assert_type(self.C, str, "C")
-        assert_type(self.S, int, "S")
-        assert_nonNeg(self.S, "S", True)
-        assert_type(self.E, int, "E")
-        assert_nonNeg(self.E, "E", True)
+        ass.ert_type(self.C, str, "C")
+        ass.ert_type(self.S, int, "S")
+        ass.ert_nonNeg(self.S, "S", True)
+        ass.ert_type(self.E, int, "E")
+        ass.ert_nonNeg(self.E, "E", True)
         assert self.S <= self.E
 
-        assert_multiTypes(self.X, [int, type(None)], "X")
-        assert_multiTypes(self.Ws, [int, type(None)], "Ws")
+        ass.ert_multiTypes(self.X, [int, type(None)], "X")
+        ass.ert_multiTypes(self.Ws, [int, type(None)], "Ws")
         if isinstance(self.X, int):
-            assert_type(self.Ws, type(None), "Ws")
-            assert_nonNeg(self.X, "X")
+            ass.ert_type(self.Ws, type(None), "Ws")
+            ass.ert_nonNeg(self.X, "X")
         else:
-            assert_type(self.Ws, int, "Ws")
+            ass.ert_type(self.Ws, int, "Ws")
 
-        assert_multiTypes(self.Ws, [int, type(None)], "Ws")
+        ass.ert_multiTypes(self.Ws, [int, type(None)], "Ws")
         if isinstance(self.Ws, int):
-            assert_type(self.X, type(None), "X")
-            assert_nonNeg(self.Ws, "Ws")
+            ass.ert_type(self.X, type(None), "X")
+            ass.ert_nonNeg(self.Ws, "Ws")
         else:
-            assert_type(self.X, int, "X")
+            ass.ert_type(self.X, int, "X")
 
-        assert_type(self.Wh, float, "Wh")
-        assert_inInterv(self.Wh, 0, 1, "Wh")
+        ass.ert_type(self.Wh, float, "Wh")
+        ass.ert_inInterv(self.Wh, 0, 1, "Wh")
 
-        assert_multiTypes(self.Rs, [int, float], "Rs")
+        ass.ert_multiTypes(self.Rs, [int, float], "Rs")
         if isinstance(self.Rs, int):
             assert self.Rs > 1
         else:
-            assert_inInterv(self.Rs, 0, 1, "Rs")
+            ass.ert_inInterv(self.Rs, 0, 1, "Rs")
 
-        assert_multiTypes(self.Rt, [int, float], "Rt")
+        ass.ert_multiTypes(self.Rt, [int, float], "Rt")
         if isinstance(self.Rt, int):
             assert self.Rt > 1
         else:
-            assert_inInterv(self.Rt, 0, 1, "Rt")
+            ass.ert_inInterv(self.Rt, 0, 1, "Rt")
 
     def _init_windows(self):
         # Build windows and central focus regions (CFR)
@@ -333,8 +333,8 @@ class Walker(GenomicWindowSet, Loggable):
     reuse = False
     _threads = 1
 
-    __current_oligos = []
-    __walk_results = {}
+    __current_oligos: List = []
+    __walk_results: Dict = {}
 
     def __init__(self, db_path, logger=logging.getLogger()):
         GenomicWindowSet.__init__(self)
@@ -347,7 +347,7 @@ class Walker(GenomicWindowSet, Loggable):
 
     @threads.setter
     def threads(self, threads):
-        assert_type(threads, int, threads)
+        ass.ert_type(threads, int, threads)
         threads = max(1, threads)
         threads = min(mp.cpu_count(), threads)
         self._threads = threads
@@ -417,7 +417,7 @@ class Walker(GenomicWindowSet, Loggable):
 
     def print_prologue(self):
 
-        s = f"* Walker *\n\n"
+        s = "* Walker *\n\n"
         s += f"Threads: {self.threads}\n"
         s += f"Database: '{self.__db.path}'\n"
         s += f"Region of interest: {self.C}:{self.S}-{self.E}\n"
@@ -441,9 +441,11 @@ class Walker(GenomicWindowSet, Loggable):
         else:
             pool = mp.Pool(np.min([self.threads, mp.cpu_count()]))
             self.log.info(f"Prepared a pool of {self.threads} threads.")
-            fexec = lambda *args, **kwargs: pool.apply_async(
-                self.process_window_parallel, args, kwargs
-            )
+
+            def fexec(*args, **kwargs):
+                pool.apply_async(
+                    self.process_window_parallel, args, kwargs
+                )
 
         self._preprocess_window(fimport)
         self._load_windows_until_next_to_do(fimport)
@@ -565,7 +567,7 @@ class Walker(GenomicWindowSet, Loggable):
                     )
 
                     sid = int(self.current_window["s"])
-                    if not sid in self.walk_results.keys():
+                    if sid not in self.walk_results.keys():
                         self.walk_results[sid] = {}
                     wid = int(self.current_window["w"])
                     self.walk_results[sid][wid] = fimport(self.window_path)
@@ -598,7 +600,6 @@ class Walker(GenomicWindowSet, Loggable):
         # Wrapper of process_window function, for parallelization
         window_tag = f"{int(window['s'])}.{int(window['w'])}"
 
-        logFormatter = logging.Formatter(Loggable.defaultfmt, datefmt=Loggable.datefmt)
         logger = logging.getLogger(f"ifpd2-window-{window_tag}")
         logger.setLevel(logging.DEBUG)
         logger = Loggable(logger)
@@ -682,9 +683,11 @@ class WalkerBinary(Walker):
         else:
             pool = mp.Pool(np.min([self.threads, mp.cpu_count()]))
             self.log.info(f"Prepared a pool of {self.threads} threads.")
-            fexec = lambda *args, **kwargs: pool.apply_async(
-                self.process_window_parallel, args, kwargs
-            )
+
+            def fexec(*args, **kwargs):
+                pool.apply_async(
+                    self.process_window_parallel, args, kwargs
+                )
 
         self._preprocess_window(fimport)
         self._load_windows_until_next_to_do(fimport)
@@ -704,7 +707,7 @@ class WalkerBinary(Walker):
 
         self.log.info("Starting to walk...")
         for line in tqdm(
-            self.__db.buffer(self.C), desc=f"Parsing binary records", leave=None
+            self.__db.buffer(self.C), desc="Parsing binary records", leave=None
         ):
             oligo = OligoBinary(line, self.r)
 

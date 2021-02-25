@@ -27,6 +27,7 @@ include = [
 python = "^3.7.1"
 numpy = "^1.20.1"
 pandas = "^1.2.2"
+rich = "^9.10.0"
 tqdm = "^4.19.8"
 
 [build-system]

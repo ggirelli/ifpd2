@@ -1,20 +1,20 @@
 """
 @author: Gabriele Girelli
 @contact: gigi.ga90@gmail.com
-@description: methods for oligo manipulation.
 """
 
 import configparser as cp
 import itertools
 import logging
-import numpy as np
+import numpy as np  # type: ignore
 import os
-import pandas as pd
+import pandas as pd  # type: ignore
+from rich.progress import track
 import shutil
-from tqdm import tqdm
+from typing import List
 
 from ifpd2.logging import Loggable
-from ifpd2.asserts import *
+from ifpd2 import asserts as ass
 
 
 class Oligo(object):
@@ -41,7 +41,7 @@ class Oligo(object):
 
     def __init__(self, oligo, i):
         super(Oligo, self).__init__()
-        assert_type(i, int, "oligo id")
+        ass.ert_type(i, int, "oligo id")
         assert i >= 0
         self._raw_data = oligo.strip().split("\t")
         for i in [2, 3, 9, 10]:
@@ -100,15 +100,19 @@ class Oligo(object):
         if all([x >= 0 for x in Gs]):
             tm_dG = self.data["tm_dG"].values
             if ss_dG >= tm_dG * min(Gs):
-                score = 0
+                self.data["score"] = 0
+                return
             if ss_dG < tm_dG * max(Gs):
-                score = np.inf
+                self.data["score"] = np.inf
+                return
             norm_ss_dG = self.__norm_value_in_range(ss_dG, [tm_dG * f for f in Gs])
         else:
             if ss_dG >= Gs[0]:
-                score = 0
+                self.data["score"] = 0
+                return
             if ss_dG < Gs[1]:
-                score = np.inf
+                self.data["score"] = np.inf
+                return
             norm_ss_dG = self.__norm_value_in_range(ss_dG, Gs)
         self.data["score"] = np.mean([norm_nOT, norm_ss_dG])
 
@@ -119,7 +123,7 @@ class OligoBinary(Oligo):
 
     def __init__(self, oligo, i):
         object.__init__(self)
-        assert_type(i, int, "oligo id")
+        ass.ert_type(i, int, "oligo id")
         assert i >= 0
         self._raw_data = []
         for fid in range(len(oligo)):
@@ -155,7 +159,7 @@ class OligoGroup(Loggable):
 
     @focus_window.setter
     def focus_window(self, focus_window):
-        assert_type(focus_window, tuple, "focus window")
+        ass.ert_type(focus_window, tuple, "focus window")
         assert 2 == len(focus_window)
         assert focus_window[1] > focus_window[0]
         self._focus_window = focus_window
@@ -506,29 +510,29 @@ class OligoPathBuilder(object):
         super(OligoPathBuilder, self).__init__()
 
     def _assert(self):
-        assert_type(self.N, int, "N")
-        assert_nonNeg(self.N, "N")
+        ass.ert_type(self.N, int, "N")
+        ass.ert_nonNeg(self.N, "N")
 
-        assert_type(self.D, int, "D")
-        assert_nonNeg(self.D, "D")
+        ass.ert_type(self.D, int, "D")
+        ass.ert_nonNeg(self.D, "D")
 
-        assert_type(self.Tr, float, "Tr")
-        assert_nonNeg(self.Tr, "Tr")
+        ass.ert_type(self.Tr, float, "Tr")
+        ass.ert_nonNeg(self.Tr, "Tr")
 
-        assert_type(self.Ps, int, "Ps")
+        ass.ert_type(self.Ps, int, "Ps")
         assert self.Ps > 1
 
-        assert_type(self.Ph, float, "Ph")
-        assert_inInterv(self.Ph, 0, 1, "Ph")
+        ass.ert_type(self.Ph, float, "Ph")
+        ass.ert_inInterv(self.Ph, 0, 1, "Ph")
 
-        assert_type(self.Po, float, "Po")
-        assert_inInterv(self.Po, 0, 1, "Po")
+        ass.ert_type(self.Po, float, "Po")
+        ass.ert_inInterv(self.Po, 0, 1, "Po")
 
     @staticmethod
     def get_non_overlapping_paths(oData, D):
         # Gets all paths of consecutive non-overlapping oligos with minimum
         # distance equal to D
-        assert_type(oData, pd.DataFrame, "oData")
+        ass.ert_type(oData, pd.DataFrame, "oData")
 
         edges = []
         start_positions = oData["start"].values
@@ -576,7 +580,7 @@ class OligoPathBuilder(object):
     def filter_paths(self, path_set, oData):
         # Selects oligo paths based on length, melting temperature, size, and
         # presence of gaps.
-        assert_type(oData, pd.DataFrame, "oData")
+        ass.ert_type(oData, pd.DataFrame, "oData")
 
         exit_polls = {"P": 0, "N": 0, "S": 0, "H": 0, "T": 0}
 
@@ -627,7 +631,7 @@ class OligoPathBuilder(object):
     @staticmethod
     def convert_paths_to_probes(path_list, oData):
         # Converts a list of paths into a list of probes
-        assert_type(path_list, list, "path list")
+        ass.ert_type(path_list, list, "path list")
         probe_list = []
         if 0 != len(path_list):
             for path in path_list:
@@ -676,21 +680,21 @@ class OligoProbeBuilder(OligoPathBuilder):
         OligoPathBuilder._assert(self)
 
         if not isinstance(self.k, type(None)):
-            assert_type(self.k, int, "k")
-            assert_nonNeg(self.k, "k")
+            ass.ert_type(self.k, int, "k")
+            ass.ert_nonNeg(self.k, "k")
             assert (self.k + self.D) * self.N <= self.Ps
 
-        assert_type(self.F, tuple, "F")
+        ass.ert_type(self.F, tuple, "F")
         assert 2 == len(self.F)
         for i in range(2):
-            assert_type(self.F[i], int, f"F[{i}]")
+            ass.ert_type(self.F[i], int, f"F[{i}]")
             assert self.F[i] >= 0
         assert self.F[1] >= self.F[0]
 
-        assert_type(self.Gs, tuple, "Gs")
+        ass.ert_type(self.Gs, tuple, "Gs")
         assert 2 == len(self.Gs)
         for i in range(2):
-            assert_type(self.Gs[i], float, f"Gs[{i}]")
+            ass.ert_type(self.Gs[i], float, f"Gs[{i}]")
             assert self.Gs[i] <= 1
         assert all(np.array(self.Gs) < 0) or all(np.array(self.Gs) >= 0)
         if self.Gs[0] >= 0:
@@ -698,27 +702,27 @@ class OligoProbeBuilder(OligoPathBuilder):
         else:
             assert self.Gs[1] <= self.Gs[0]
 
-        assert_type(self.Ot, float, "Ot")
+        ass.ert_type(self.Ot, float, "Ot")
         assert 0 < self.Ot and 1 >= self.Ot
 
     def get_prologue(self):
-        s = f"* OligoProbeBuilder *\n\n"
+        s = "* OligoProbeBuilder *\n\n"
         s += f"Aim to build probes with {self.N} oligos each.\n"
         s += f"Off-target threshold range set at {self.F}.\n"
         if isinstance(self.Gs[0], int):
-            s += f"Threshold on the delta free energy of the most stable"
+            s += "Threshold on the delta free energy of the most stable"
             s += f" secondary structure set at range {self.Gs} kcal/mol.\n"
         else:
-            s += f"Threshold on the delta free energy of the most stable"
-            s += f" secondary structure\nset at range"
+            s += "Threshold on the delta free energy of the most stable"
+            s += " secondary structure\nset at range"
             s += f" {[t*100 for t in self.Gs]}% of the delta free energy of"
-            s += f" hybridization.\n"
+            s += " hybridization.\n"
 
         s += f"\nMelting temperature range of {2*self.Tr} degC.\n"
-        s += f"Minimum distance between consecutive oligos in a probe"
+        s += "Minimum distance between consecutive oligos in a probe"
         s += f" set at {self.D} nt.\n"
         s += f"Probe size threshold set at {self.Ps} nt.\n"
-        s += f"Reducing probes when oligo intersection fraction is equal to"
+        s += "Reducing probes when oligo intersection fraction is equal to"
         s += f" or greater than {self.Po}.\n"
 
         return s
@@ -793,7 +797,6 @@ class OligoProbeBuilder(OligoPathBuilder):
                 break
 
             oGroup.apply_threshold(score_thr)
-            nOligos = oGroup.get_n_focused_oligos()
             nOligosUsable = oGroup.get_n_focused_oligos(True)
             if nOligosUsable == nOligos_prev_score_thr:
                 continue
@@ -829,11 +832,15 @@ class OligoProbeBuilder(OligoPathBuilder):
         if verbosity:
             nPaths = len(paths)
             logger.info(
-                f"Found {nPaths} sets with up to {pathMaxLen} "
-                + f"non-overlapping oligos."
+                " ".join(
+                    [
+                        f"Found {nPaths} sets with up to {pathMaxLen}",
+                        "non-overlapping oligos.",
+                    ]
+                )
             )
         if pathMaxLen < self.N:
-            logger.warning(f"Longest path is shorter than requested. " + "Skipped.")
+            logger.warning("Longest path is shorter than requested. " + "Skipped.")
             return []
 
         paths, comment = self.filter_paths(paths, oData)
@@ -865,7 +872,7 @@ class OligoProbeBuilder(OligoPathBuilder):
                     selected_probes.append(probe_ref)
                     probe_ref = probe
 
-            if not probe_ref in selected_probes:
+            if probe_ref not in selected_probes:
                 selected_probes.append(probe_ref)
 
             n_shared_oligos = probe_ref.count_shared_oligos(sorted_probes[-1])
@@ -1089,7 +1096,7 @@ class OligoProbeSet(object):
 class OligoProbeSetBuilder(Loggable):
     """Class to build OligoProbeSet objects."""
 
-    probe_set_list = []
+    probe_set_list: List = []
 
     def __init__(self, out_path, logger=logging.getLogger()):
         Loggable.__init__(self, logger)
@@ -1100,15 +1107,12 @@ class OligoProbeSetBuilder(Loggable):
         os.mkdir(out_path)
 
     def build(self, probe_candidates):
-        nProbes = []
         for (wSet, window_list) in probe_candidates.items():
             window_list = list(window_list.values())
             i = 0
             while 0 == len(window_list[i]):
                 i += 1
             probe_set_list = [(p,) for p in window_list[i]]
-            # nProbes = [len(probes) for probes in window_list.values()]
-            # nProbeSets = np.sum([n for n in nProbes if 0 != n])
 
             for w in window_list[(i + 1) :]:
                 if 0 == len(w):
@@ -1141,6 +1145,6 @@ class OligoProbeSetBuilder(Loggable):
 
     def export(self):
         self.log.info("Exporting probe sets...")
-        for psi in tqdm(range(len(self.probe_set_list)), desc="Probe set"):
+        for psi in track(range(len(self.probe_set_list)), desc="Probe set"):
             probe_set = self.probe_set_list[psi]
             probe_set.export(os.path.join(self.out_path, f"probe_set_{psi}"))

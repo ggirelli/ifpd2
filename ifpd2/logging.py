@@ -1,7 +1,6 @@
 """
 @author: Gabriele Girelli
 @contact: gigi.ga90@gmail.com
-@description: general class to be inherited by Loggable classes.
 """
 
 import logging
