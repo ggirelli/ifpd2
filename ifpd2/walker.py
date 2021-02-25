@@ -485,8 +485,12 @@ class Walker(GenomicWindowSet):
 
             if (win.transpose().values == self.current_window.values).all():
                 logging.info(
-                    "Re-using previous results for window "
-                    + f"{self.window_tag} {self.window_range}"
+                    "".join(
+                        [
+                            "Re-using previous results for window ",
+                            f"{self.window_tag} {self.window_range}",
+                        ]
+                    )
                 )
 
                 sid = int(self.current_window["s"])
@@ -588,16 +592,24 @@ class Walker(GenomicWindowSet):
         if len(oligos) >= N:
             oGroup = OligoGroup(oligos, logger)
             logger.info(
-                f"Retrieved {oGroup.data.shape[0]} oligos for"
-                + f" window {int(window['s'])}.{int(window['w'])} "
-                + f"[{int(window['start'])}:{int(window['end'])}]"
+                " ".join(
+                    [
+                        f"Retrieved {oGroup.data.shape[0]} oligos for",
+                        f"window {int(window['s'])}.{int(window['w'])}",
+                        f"[{int(window['start'])}:{int(window['end'])}]",
+                    ]
+                )
             )
             results = fprocess(oGroup, window, *args, **kwargs)
         else:
             logger.warning(
-                f"Window {int(window['s'])}.{int(window['w'])}"
-                + " does not have enough oligos "
-                + f"{len(oligos)}/{N}, skipped."
+                " ".join(
+                    [
+                        f"Window {int(window['s'])}.{int(window['w'])}",
+                        "does not have enough oligos",
+                        f"{len(oligos)}/{N}, skipped.",
+                    ]
+                )
             )
             results = []
 

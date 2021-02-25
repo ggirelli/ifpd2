@@ -89,6 +89,13 @@ class OligoProbeSet(object):
 
     @property
     def featDF(self):
+        mean_score = (1 / 3) * sum(
+            [
+                np.std(self.sizes) / np.mean(self.sizes),
+                np.std(self.spreads) / np.mean(self.spreads),
+                np.std(self.oligo_tm) / np.mean(self.oligo_tm),
+            ]
+        )
         df = pd.DataFrame(
             [
                 self.range[0],
@@ -108,13 +115,7 @@ class OligoProbeSet(object):
                 np.diff(self.tm_range)[0],
                 np.mean(self.oligo_tm),
                 np.std(self.oligo_tm),
-                1
-                / 3
-                * (
-                    np.std(self.sizes) / np.mean(self.sizes)
-                    + np.std(self.spreads) / np.mean(self.spreads)
-                    + np.std(self.oligo_tm) / np.mean(self.oligo_tm)
-                ),
+                mean_score,
             ]
         ).transpose()
         df.columns = [
@@ -158,8 +159,12 @@ class OligoProbeSet(object):
                 for i in range(probe.data.shape[0]):
                     oligo = probe.data.iloc[i]
                     BH.write(
-                        f">probe_{pi}:{oligo['name']}"
-                        + f":{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n"
+                        "".join(
+                            [
+                                f">probe_{pi}:{oligo['name']}",
+                                f":{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n",
+                            ]
+                        )
                     )
                     BH.write(f"{probe.data.iloc[i]['seq']}\n")
 
@@ -204,8 +209,12 @@ class OligoProbeSetBuilder(object):
 
             self.probe_set_list.extend(probe_set_list)
             logging.info(
-                f"Built {len(probe_set_list)} probe set candidates "
-                + f"from window set #{wSet+1}"
+                "".join(
+                    [
+                        f"Built {len(probe_set_list)} probe set candidates ",
+                        f"from window set #{wSet+1}",
+                    ]
+                )
             )
 
         self.probe_set_list = [OligoProbeSet(ps) for ps in self.probe_set_list]
