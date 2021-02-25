@@ -435,7 +435,6 @@ class Walker(GenomicWindowSet):
                 return (parsing_output, parsing_status)
 
     def __queue_process(self, queue, process):
-        logging.info((process, self.current_window))
         if 1 == self._threads:
             queue.append(process.get())
         else:
@@ -524,7 +523,7 @@ class Walker(GenomicWindowSet):
         if os.path.isfile(win_file_path) and win_done:
             win = pd.read_csv(win_file_path, sep="\t", header=None, index_col=0)
 
-            if (win.transpose().values == self.current_window.values).all():
+            if (win.transpose().values[0][1:] == self.current_window.values).all():
                 self.logger.info(
                     "".join(
                         [
