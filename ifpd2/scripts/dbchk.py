@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 # ------------------------------------------------------------------------------
-# 
+#
 # Author: Gabriele Girelli
 # Email: gigi.ga90@gmail.com
 # Date: 2019-10-03
-# 
+#
 # ------------------------------------------------------------------------------
 
 import argparse
@@ -18,18 +18,19 @@ import sys
 import time
 from tqdm import tqdm
 
-parser = argparse.ArgumentParser(description = '''
+parser = argparse.ArgumentParser(
+    description="""
 Lorem ipsum dolor sit amet, consectetur adipisicing elit. Soluta, aspernatur,
 natus. Possimus recusandae distinctio, voluptatem fuga delectus laudantium ut,
 inventore culpa sit amet ullam officiis, tenetur nobis eius vitae dolore.
-''', formatter_class = argparse.RawDescriptionHelpFormatter)
+""",
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+)
 
-parser.add_argument('dbpath', type = str,
-    help = '''Path to database folder.''')
+parser.add_argument("dbpath", type=str, help="""Path to database folder.""")
 
 version = "0.0.1"
-parser.add_argument('--version', action = 'version',
-        version = f'{sys.argv[0]} v{version}')
+parser.add_argument("--version", action="version", version=f"{sys.argv[0]} v{version}")
 
 args = parser.parse_args()
 
@@ -42,23 +43,26 @@ config_path = os.path.join(args.dbpath, ".config")
 assert os.path.isfile(config_path)
 config = cp.ConfigParser()
 config.read(config_path)
-args.N = config['IFPD2DB'].getint('namelen')
-args.c = config['IFPD2DB'].getint('chromlen')
-args.k = config['IFPD2DB'].getint('oligok')
+args.N = config["IFPD2DB"].getint("namelen")
+args.c = config["IFPD2DB"].getint("chromlen")
+args.k = config["IFPD2DB"].getint("oligok")
 
-print(f'''Database: {args.dbpath}
+print(
+    f"""Database: {args.dbpath}
 Name field size: {args.N}
 Chrom field size: {args.c}
-Max oligo length: {args.k}''')
+Max oligo length: {args.k}"""
+)
 
 dtype = f"{args.N}s {args.c}s i i f f f f {args.k}s i i f f"
 n_expected_fields = len(dtype.split(" "))
 n_bytes = struct.calcsize(dtype)
 
 for fname in os.listdir(args.dbpath):
-    if fname in ['.config']: continue
+    if fname in [".config"]:
+        continue
     fpath = os.path.join(args.dbpath, fname)
-    t = tqdm(desc = f"Checking '{fpath}'", leave = True)
+    t = tqdm(desc=f"Checking '{fpath}'", leave=True)
     with open(fpath, "rb") as IH:
         line = IH.read(n_bytes)
         while 0 != len(line):
@@ -66,7 +70,7 @@ for fname in os.listdir(args.dbpath):
             oligo = []
             for fid in range(len(ob)):
                 if isinstance(ob[fid], bytes):
-                    oligo.append(str(ob[fid].decode("utf-8")).rstrip('\x00'))
+                    oligo.append(str(ob[fid].decode("utf-8")).rstrip("\x00"))
                 else:
                     oligo.append(ob[fid])
             t.update(1)
