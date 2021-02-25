@@ -133,7 +133,8 @@ class OligoGroup(object):
     _oligos_passing_score_filter = None
 
     def __init__(self, oligos, logger=logging.getLogger()):
-        super(OligoGroup, self).__init__(logger)
+        super(OligoGroup, self).__init__()
+        self.logger = logger
         self._data = pd.concat([o.data for o in oligos], ignore_index=True)
         self._data = self._data.loc[self._data["score"] <= 1, :]
         self._oligos_passing_score_filter = self._data["score"].values <= 1
@@ -205,7 +206,7 @@ class OligoGroup(object):
         if verbose:
             nOligos = self.get_n_focused_oligos()
             nOligosUsable = self.get_n_focused_oligos(True)
-            logging.info(
+            self.logger.info(
                 " ".join(
                     [
                         f"Set focus region to {self.focus_window_repr}",
@@ -228,7 +229,7 @@ class OligoGroup(object):
         if verbose:
             nOligos = self.get_n_focused_oligos()
             nOligosUsable = self.get_n_focused_oligos(True)
-            logging.info(
+            self.logger.info(
                 " ".join(
                     [
                         f"Expanded focus region to {self.focus_window}",
@@ -243,7 +244,7 @@ class OligoGroup(object):
 
         if self.focus_window[0] <= self._data["start"].min():
             if self.focus_window[1] >= self._data["end"].max():
-                logging.warning(
+                self.logger.warning(
                     " ".join(
                         [
                             "Cannot expand the focus region any further ",
@@ -290,7 +291,7 @@ class OligoGroup(object):
         # Expand the sub-window of interest to add the closest oligo
         # Return False if not possible (e.g., all oligos already included)
         if self.get_n_focused_oligos() == self._data.shape[0]:
-            logging.warning(
+            self.logger.warning(
                 " ".join(
                     [
                         "Cannot expand the focus region any further",
@@ -337,7 +338,7 @@ class OligoGroup(object):
         while c <= safeN:
             passing_oData = oData.loc[oData["start"] > start, :]
             if 0 == passing_oData.shape[0]:
-                logging.info("Not enough oligos, skipped discard step.")
+                self.logger.info("Not enough oligos, skipped discard step.")
                 return False
             start = passing_oData["start"].values[0]
             start += len(passing_oData["seq"].values[0]) + D
@@ -347,7 +348,7 @@ class OligoGroup(object):
         while c <= safeN:
             passing_oData = oData.loc[oData["end"] <= end]
             if 0 == passing_oData.shape[-1]:
-                logging.info("Not enough oligos, skipped discard step.")
+                self.logger.info("Not enough oligos, skipped discard step.")
                 return False
             end = passing_oData["end"].values[-1]
             end -= len(passing_oData["seq"].values[-1]) - D
@@ -367,7 +368,7 @@ class OligoGroup(object):
             return
 
         if not self.__discard_oligos_in_range(start, end):
-            logging.info(f"No oligos to discard in range [{start}:{end}).")
+            self.logger.info(f"No oligos to discard in range [{start}:{end}).")
 
     def __discard_oligos_in_range(self, start, end):
         if start >= end:
@@ -377,7 +378,7 @@ class OligoGroup(object):
         keep_condition = np.logical_or(start_condition, end_condition)
         nDiscarded = self.oligos_in_focus_window.sum() - keep_condition.sum()
         self.__apply_keep_condition(keep_condition)
-        logging.info(
+        self.logger.info(
             f"Discarded {nDiscarded}" + f" oligos from the [{start}:{end}) range."
         )
         return True

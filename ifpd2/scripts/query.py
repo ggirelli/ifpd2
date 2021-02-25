@@ -12,7 +12,6 @@ from ifpd2.probe_set import OligoProbeSetBuilder
 import logging
 import numpy as np  # type: ignore
 import os
-import re
 
 
 def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
@@ -51,8 +50,8 @@ def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPars
         "-X",
         metavar="probes",
         type=int,
-        default=None,
-        help="""Number of probes to query for.""",
+        default=1,
+        help="""Number of probes to query for. Default: 1.""",
     )
     query.add_argument(
         "-N",
@@ -219,22 +218,19 @@ def assert_reusable(args):
 @enable_rich_assert
 def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
     assert not all([isinstance(args.X, type(None)), isinstance(args.W, type(None))])
-
-    reg = re.compile(args.region_regexp)
-    assert re.match(
-        reg, args.region
-    ), "provided region '%s' does not match regular expression '%s'." % (
-        args.region,
-        args.region_regexp,
-    )
-
     args.start, args.end = args.region
-    if 0 == len(args.start) and 0 == len(args.end):
-        args.start = 0
-        args.end = 0
-    else:
-        args.start = int(args.start)
-        args.end = int(args.end)
+    args.start = int(args.start)
+    if not np.isfinite(args.end):
+        args.X = None
+        logging.info(
+            " ".join(
+                [
+                    "Cannot design a specific number of probes for queries on",
+                    "a whole chromosome/feature.",
+                ]
+            )
+        )
+    args.end = int(args.end) if np.isfinite(args.end) else 0
 
     if args.R > 1:
         args.R = int(args.R)
@@ -273,7 +269,7 @@ def run(args: argparse.Namespace) -> None:
     opsb = OligoProbeSetBuilder(os.path.join(args.O, "probe_sets"))
     logging.info(opb.get_prologue())
 
-    ow = Walker(args.dbpath)
+    ow = Walker(args.database)
     ow.C = args.chrom
     ow.S = args.start
     ow.E = args.end

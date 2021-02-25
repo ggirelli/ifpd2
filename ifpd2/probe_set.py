@@ -229,6 +229,6 @@ class OligoProbeSetBuilder(object):
 
     def export(self):
         logging.info("Exporting probe sets...")
-        for psi in track(range(len(self.probe_set_list)), desc="Probe set"):
+        for psi in track(range(len(self.probe_set_list)), description="Probe set"):
             probe_set = self.probe_set_list[psi]
             probe_set.export(os.path.join(self.out_path, f"probe_set_{psi}"))
