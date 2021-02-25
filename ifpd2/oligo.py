@@ -1,9 +1,8 @@
-
-'''
+"""
 @author: Gabriele Girelli
 @contact: gigi.ga90@gmail.com
 @description: methods for oligo manipulation.
-'''
+"""
 
 import configparser as cp
 import itertools
@@ -17,1008 +16,1131 @@ from tqdm import tqdm
 from ifpd2.logging import Loggable
 from ifpd2.asserts import *
 
+
 class Oligo(object):
-	"""Oligo database line/record parser.
-	Presents oligo values as properties."""
+    """Oligo database line/record parser.
+    Presents oligo values as properties."""
 
-	_data = None
+    _data = None
 
-	__colnames = ['name', 'chrom', 'start', 'end', 'tm_dG',
-		'dH', 'dS', 'Tm', 'seq', 'nOT', 'k', 'ss_dG', 'GC']
+    __colnames = [
+        "name",
+        "chrom",
+        "start",
+        "end",
+        "tm_dG",
+        "dH",
+        "dS",
+        "Tm",
+        "seq",
+        "nOT",
+        "k",
+        "ss_dG",
+        "GC",
+    ]
 
-	def __init__(self, oligo, i):
-		super(Oligo, self).__init__()
-		assert_type(i, int, "oligo id")
-		assert i >= 0
-		self._raw_data = oligo.strip().split("\t")
-		for i in [2, 3, 9, 10]:
-			self._raw_data[i] = int(self._raw_data[i])
-		for i in [4, 5, 6, 7, 11, 12]:
-			self._raw_data[i] = float(self._raw_data[i])
-		self._idx = i
+    def __init__(self, oligo, i):
+        super(Oligo, self).__init__()
+        assert_type(i, int, "oligo id")
+        assert i >= 0
+        self._raw_data = oligo.strip().split("\t")
+        for i in [2, 3, 9, 10]:
+            self._raw_data[i] = int(self._raw_data[i])
+        for i in [4, 5, 6, 7, 11, 12]:
+            self._raw_data[i] = float(self._raw_data[i])
+        self._idx = i
 
-	@property
-	def idx(self):
-		return self._idx
-	
-	@property
-	def raw_data(self):
-		return self._raw_data
-	
-	@property
-	def data(self):
-		if isinstance(self._data, type(None)):
-			self._data = pd.DataFrame(self._raw_data,
-				columns=[self._idx], index=self.__colnames).transpose()			
-		return self._data
+    @property
+    def idx(self):
+        return self._idx
 
-	@property
-	def start(self):
-		return self.data['start'].values[0]
+    @property
+    def raw_data(self):
+        return self._raw_data
 
-	@property
-	def end(self):
-		return self.data['end'].values[0]
+    @property
+    def data(self):
+        if isinstance(self._data, type(None)):
+            self._data = pd.DataFrame(
+                self._raw_data, columns=[self._idx], index=self.__colnames
+            ).transpose()
+        return self._data
 
-	@property
-	def score(self):
-		if "score" in self.data.columns:
-			return self.data['score'].values[0]
-		return np.nan
-	
-	@staticmethod
-	def __norm_value_in_range(v, r):
-		if 0 == r[1]: return np.nan
-		return (v - r[0])/(r[1] - r[0])
+    @property
+    def start(self):
+        return self.data["start"].values[0]
 
-	def add_score(self, F, Gs):
-		nOT = self.data['nOT'].values
-		if nOT <= F[0]:
-			self.data['score'] = 0
-			return
-		if nOT > F[1]:
-			self.data['score'] = np.inf
-			return
-		norm_nOT = self.__norm_value_in_range(nOT, F)
+    @property
+    def end(self):
+        return self.data["end"].values[0]
 
-		ss_dG = self.data['ss_dG'].values
-		if all([x >= 0 for x in Gs]):
-			tm_dG = self.data['tm_dG'].values
-			if ss_dG >= tm_dG*min(Gs): score = 0
-			if ss_dG < tm_dG*max(Gs): score = np.inf
-			norm_ss_dG = self.__norm_value_in_range(ss_dG,
-				[tm_dG*f for f in Gs])
-		else:
-			if ss_dG >= Gs[0]: score = 0
-			if ss_dG < Gs[1]: score = np.inf
-			norm_ss_dG = self.__norm_value_in_range(ss_dG, Gs)
-		self.data['score'] = np.mean([norm_nOT, norm_ss_dG])
+    @property
+    def score(self):
+        if "score" in self.data.columns:
+            return self.data["score"].values[0]
+        return np.nan
+
+    @staticmethod
+    def __norm_value_in_range(v, r):
+        if 0 == r[1]:
+            return np.nan
+        return (v - r[0]) / (r[1] - r[0])
+
+    def add_score(self, F, Gs):
+        nOT = self.data["nOT"].values
+        if nOT <= F[0]:
+            self.data["score"] = 0
+            return
+        if nOT > F[1]:
+            self.data["score"] = np.inf
+            return
+        norm_nOT = self.__norm_value_in_range(nOT, F)
+
+        ss_dG = self.data["ss_dG"].values
+        if all([x >= 0 for x in Gs]):
+            tm_dG = self.data["tm_dG"].values
+            if ss_dG >= tm_dG * min(Gs):
+                score = 0
+            if ss_dG < tm_dG * max(Gs):
+                score = np.inf
+            norm_ss_dG = self.__norm_value_in_range(ss_dG, [tm_dG * f for f in Gs])
+        else:
+            if ss_dG >= Gs[0]:
+                score = 0
+            if ss_dG < Gs[1]:
+                score = np.inf
+            norm_ss_dG = self.__norm_value_in_range(ss_dG, Gs)
+        self.data["score"] = np.mean([norm_nOT, norm_ss_dG])
+
 
 class OligoBinary(Oligo):
-	"""Oligo binary database line/record parser.
-	Presents oligo values as properties"""
+    """Oligo binary database line/record parser.
+    Presents oligo values as properties"""
 
-	def __init__(self, oligo, i):
-		object.__init__(self)
-		assert_type(i, int, "oligo id")
-		assert i >= 0
-		self._raw_data = []
-		for fid in range(len(oligo)):
-			if isinstance(oligo[fid], bytes):
-				self._raw_data.append(
-					str(oligo[fid].decode("utf-8")).rstrip('\x00'))
-			else:
-				self._raw_data.append(oligo[fid])
-		self._idx = i
+    def __init__(self, oligo, i):
+        object.__init__(self)
+        assert_type(i, int, "oligo id")
+        assert i >= 0
+        self._raw_data = []
+        for fid in range(len(oligo)):
+            if isinstance(oligo[fid], bytes):
+                self._raw_data.append(str(oligo[fid].decode("utf-8")).rstrip("\x00"))
+            else:
+                self._raw_data.append(oligo[fid])
+        self._idx = i
+
 
 class OligoGroup(Loggable):
-	"""Allows to select oligos from a group based on a "focus" window of
-	interest. The window can be expanded to the closest oligo or to retain at
-	least a given number of oligos."""
+    """Allows to select oligos from a group based on a "focus" window of
+    interest. The window can be expanded to the closest oligo or to retain at
+    least a given number of oligos."""
 
-	_focus_window = None		# Left-close, right-open
-	_oligos_in_focus_window = None
-	_oligos_passing_score_filter = None
+    _focus_window = None  # Left-close, right-open
+    _oligos_in_focus_window = None
+    _oligos_passing_score_filter = None
 
-	def __init__(self, oligos, logger = logging.getLogger()):
-		super(OligoGroup, self).__init__(logger)
-		self._data = pd.concat([o.data for o in oligos], ignore_index = True)
-		self._data = self._data.loc[self._data['score'] <= 1, :]
-		self._oligos_passing_score_filter = self._data['score'].values <= 1
+    def __init__(self, oligos, logger=logging.getLogger()):
+        super(OligoGroup, self).__init__(logger)
+        self._data = pd.concat([o.data for o in oligos], ignore_index=True)
+        self._data = self._data.loc[self._data["score"] <= 1, :]
+        self._oligos_passing_score_filter = self._data["score"].values <= 1
 
-	@property
-	def data(self):
-		return self._data.copy()
+    @property
+    def data(self):
+        return self._data.copy()
 
-	@property
-	def focus_window(self):
-		return self._focus_window
+    @property
+    def focus_window(self):
+        return self._focus_window
 
-	@focus_window.setter
-	def focus_window(self, focus_window):
-		assert_type(focus_window, tuple, "focus window")
-		assert 2 == len(focus_window)
-		assert focus_window[1] > focus_window[0]
-		self._focus_window = focus_window
+    @focus_window.setter
+    def focus_window(self, focus_window):
+        assert_type(focus_window, tuple, "focus window")
+        assert 2 == len(focus_window)
+        assert focus_window[1] > focus_window[0]
+        self._focus_window = focus_window
 
-	@property
-	def focus_window_repr(self):
-		return f"[{self.focus_window[0]}:{self.focus_window[1]})"
-	
-	@property
-	def focus_window_size(self):
-		return self.focus_window[1] - self.focus_window[0]
+    @property
+    def focus_window_repr(self):
+        return f"[{self.focus_window[0]}:{self.focus_window[1]})"
 
-	@property
-	def oligos_in_focus_window(self):
-		return self._oligos_in_focus_window
+    @property
+    def focus_window_size(self):
+        return self.focus_window[1] - self.focus_window[0]
 
-	@property
-	def oligos_passing_score_filter(self):
-		return self._oligos_passing_score_filter
-	
-	@property
-	def usable_oligos(self):
-		if isinstance(self.oligos_in_focus_window, type(None)):
-			return self.oligos_passing_score_filter
-		return np.logical_and(
-			self.oligos_in_focus_window,
-			self.oligos_passing_score_filter)
-	
-	def get_focused_oligos(self, onlyUsable = False):
-		if onlyUsable:
-			return self._data.loc[self.usable_oligos]
-		else:
-			return self._data.loc[self.oligos_in_focus_window, :]
+    @property
+    def oligos_in_focus_window(self):
+        return self._oligos_in_focus_window
 
-	def get_n_focused_oligos(self, onlyUsable = False):
-		if 0 == self.usable_oligos.sum():
-			return 0
-		return self.get_focused_oligos(onlyUsable).shape[0]
+    @property
+    def oligos_passing_score_filter(self):
+        return self._oligos_passing_score_filter
 
-	def focus_all(self):
-		# Use all oligos to define a focus region
-		self.set_focus_window(self._data.loc[:,'start'].min(),
-			self._data.loc[:,'start'].max()+1)
+    @property
+    def usable_oligos(self):
+        if isinstance(self.oligos_in_focus_window, type(None)):
+            return self.oligos_passing_score_filter
+        return np.logical_and(
+            self.oligos_in_focus_window, self.oligos_passing_score_filter
+        )
 
-	def set_focus_window(self, start, end, verbose = True):
-		# Set a sub-window of interest to focus on
-		self.focus_window = (start, end)
+    def get_focused_oligos(self, onlyUsable=False):
+        if onlyUsable:
+            return self._data.loc[self.usable_oligos]
+        else:
+            return self._data.loc[self.oligos_in_focus_window, :]
 
-		start_condition = self._data['start'].values >= self.focus_window[0]
-		end_condition = self._data['end'].values < self.focus_window[1]
-		self._oligos_in_focus_window = np.logical_and(
-			start_condition, end_condition)
+    def get_n_focused_oligos(self, onlyUsable=False):
+        if 0 == self.usable_oligos.sum():
+            return 0
+        return self.get_focused_oligos(onlyUsable).shape[0]
 
-		if verbose:
-			nOligos = self.get_n_focused_oligos()
-			nOligosUsable = self.get_n_focused_oligos(True)
-			self.log.info(f"Set focus region to {self.focus_window_repr}" +
-				f" ({nOligos} oligos, {nOligosUsable} usable)")
+    def focus_all(self):
+        # Use all oligos to define a focus region
+        self.set_focus_window(
+            self._data.loc[:, "start"].min(), self._data.loc[:, "start"].max() + 1
+        )
 
-	def expand_focus_to_n_oligos(self, n, verbose = True):
-		# Expand the sub-window of interest to retrieve at least n oligos
-		assert not isinstance(self.focus_window, type(None))
-		
-		if n <= self.get_n_focused_oligos():
-			return
-		
-		for i in range(n-self.get_n_focused_oligos()):
-			if not self.expand_focus_to_closest():
-				return
-		
-		if verbose:
-			nOligos = self.get_n_focused_oligos()
-			nOligosUsable = self.get_n_focused_oligos(True)
-			self.log.info(f"Expanded focus region to {self.focus_window}" +
-				f" ({nOligos} oligos, {nOligosUsable} usable)")
+    def set_focus_window(self, start, end, verbose=True):
+        # Set a sub-window of interest to focus on
+        self.focus_window = (start, end)
 
-	def expand_focus_by_step(self, step, verbose = True):
-		# Expand the current focus window of a given step (in nt)
-		assert 0 < step
+        start_condition = self._data["start"].values >= self.focus_window[0]
+        end_condition = self._data["end"].values < self.focus_window[1]
+        self._oligos_in_focus_window = np.logical_and(start_condition, end_condition)
 
-		if self.focus_window[0] <= self._data['start'].min():
-			if self.focus_window[1] >= self._data['end'].max():
-				self.log.warning("Cannot expand the focus region any further " +
-					"(all oligos already included)")
-				return False
+        if verbose:
+            nOligos = self.get_n_focused_oligos()
+            nOligosUsable = self.get_n_focused_oligos(True)
+            self.log.info(
+                f"Set focus region to {self.focus_window_repr}"
+                + f" ({nOligos} oligos, {nOligosUsable} usable)"
+            )
 
-		new_focus_start, new_focus_end = self.focus_window
-		new_focus_start -= step/2
-		new_focus_end += step/2
-		new_focus_start = np.max([new_focus_start, self._data['start'].min()])
-		new_focus_end = np.min([new_focus_end, self._data['end'].max()])
+    def expand_focus_to_n_oligos(self, n, verbose=True):
+        # Expand the sub-window of interest to retrieve at least n oligos
+        assert not isinstance(self.focus_window, type(None))
 
-		self.set_focus_window(new_focus_start, new_focus_end, verbose)
-		return True
+        if n <= self.get_n_focused_oligos():
+            return
 
-	def expand_focus_to_closest(self):
-		# Expand the sub-window of interest to add the closest oligo
-		# Return False if not possible (e.g., all oligos already included)
-		if self.get_n_focused_oligos() == self._data.shape[0]:
-			self.log.warning("Cannot expand the focus region any further " +
-				"(all oligos already included)")
-			return False
+        for i in range(n - self.get_n_focused_oligos()):
+            if not self.expand_focus_to_closest():
+                return
 
-		earl = self._data['start'].values < self.focus_window[0]
-		if 0 != earl.sum():
-			max_start = self._data.loc[earl, 'start'].max()
-			d_earl = self.focus_window[0] - max_start
-		else:
-			d_earl = np.inf
+        if verbose:
+            nOligos = self.get_n_focused_oligos()
+            nOligosUsable = self.get_n_focused_oligos(True)
+            self.log.info(
+                f"Expanded focus region to {self.focus_window}"
+                + f" ({nOligos} oligos, {nOligosUsable} usable)"
+            )
 
-		late = self._data['end'].values >= self.focus_window[1]
-		if 0 != late.sum():
-			min_end = self._data.loc[late, 'end'].min()
-			d_late = min_end - self.focus_window[1]
-		else:
-			d_late = np.inf
+    def expand_focus_by_step(self, step, verbose=True):
+        # Expand the current focus window of a given step (in nt)
+        assert 0 < step
 
-		if np.isinf(d_late):
-			if np.isinf(d_earl):
-				return False
-			else:
-				self.set_focus_window(max_start, self.focus_window[1], False)
-		elif np.isinf(d_earl):
-			self.set_focus_window(self.focus_window[0], min_end+1, False)
-		else:
-			if d_earl <= d_late:
-				self.set_focus_window(max_start, self.focus_window[1], False)
-			else:
-				self.set_focus_window(self.focus_window[0], min_end+1, False)
+        if self.focus_window[0] <= self._data["start"].min():
+            if self.focus_window[1] >= self._data["end"].max():
+                self.log.warning(
+                    "Cannot expand the focus region any further "
+                    + "(all oligos already included)"
+                )
+                return False
 
-		return True
+        new_focus_start, new_focus_end = self.focus_window
+        new_focus_start -= step / 2
+        new_focus_end += step / 2
+        new_focus_start = np.max([new_focus_start, self._data["start"].min()])
+        new_focus_end = np.min([new_focus_end, self._data["end"].max()])
 
-	def apply_threshold(self, threshold):
-		# Unfocuses oligos with score higher than the threshold
-		assert threshold <= 1 and threshold >= 0
-		self._oligos_passing_score_filter = self._data['score'] <= threshold
+        self.set_focus_window(new_focus_start, new_focus_end, verbose)
+        return True
 
-	def reset_threshold(self):
-		self.apply_threshold(1)
+    def expand_focus_to_closest(self):
+        # Expand the sub-window of interest to add the closest oligo
+        # Return False if not possible (e.g., all oligos already included)
+        if self.get_n_focused_oligos() == self._data.shape[0]:
+            self.log.warning(
+                "Cannot expand the focus region any further "
+                + "(all oligos already included)"
+            )
+            return False
 
-	def discard_focused_oligos_safeDist(self, safeDist):
-		# Discard focused oligos that are not within a safe distance from the
-		# CFR borders
-		start = self.data.loc[self.oligos_in_focus_window, "start"].min()
-		end = self.data.loc[self.oligos_in_focus_window, "end"].max()+1
-		self.__discard_oligos_in_range(start+safeDist, end-safeDist)	
+        earl = self._data["start"].values < self.focus_window[0]
+        if 0 != earl.sum():
+            max_start = self._data.loc[earl, "start"].max()
+            d_earl = self.focus_window[0] - max_start
+        else:
+            d_earl = np.inf
 
-	def discard_focused_oligos_safeN(self, safeN, D):
-		# Discard focused oligos that are neither the first nor the last safeN
-		
-		start = self.data.loc[self.oligos_in_focus_window,"start"
-			].values[0] + len(self.data.loc[self.oligos_in_focus_window,"seq"
-			].values[0]) + D
-		end = self.data.loc[self.oligos_in_focus_window,"end"
-			].values[-1] + len(self.data.loc[self.oligos_in_focus_window,"seq"
-			].values[-1]) + D
+        late = self._data["end"].values >= self.focus_window[1]
+        if 0 != late.sum():
+            min_end = self._data.loc[late, "end"].min()
+            d_late = min_end - self.focus_window[1]
+        else:
+            d_late = np.inf
 
-		oData = self.get_focused_oligos()
+        if np.isinf(d_late):
+            if np.isinf(d_earl):
+                return False
+            else:
+                self.set_focus_window(max_start, self.focus_window[1], False)
+        elif np.isinf(d_earl):
+            self.set_focus_window(self.focus_window[0], min_end + 1, False)
+        else:
+            if d_earl <= d_late:
+                self.set_focus_window(max_start, self.focus_window[1], False)
+            else:
+                self.set_focus_window(self.focus_window[0], min_end + 1, False)
 
-		c = 1
-		while c <= safeN:
-			passing_oData = oData.loc[oData['start'] > start, :]
-			if 0 == passing_oData.shape[0]:
-				self.log.info("Not enough oligos, skipped discard step.")
-				return
-			start = passing_oData['start'].values[0] + len(
-				passing_oData['seq'].values[0]) + D
-			c += 1
+        return True
 
-		c = 1
-		while c <= safeN:
-			passing_oData = oData.loc[oData['end'] <= start]
-			if 0 == passing_oData.shape[-1]:
-				self.log.info("Not enough oligos, skipped discard step.")
-				return
-			end = passing_oData['end'].values[-1] - len(
-				passing_oData['seq'].values[-1]) - D
-			c += 1
+    def apply_threshold(self, threshold):
+        # Unfocuses oligos with score higher than the threshold
+        assert threshold <= 1 and threshold >= 0
+        self._oligos_passing_score_filter = self._data["score"] <= threshold
 
-		if not self.__discard_oligos_in_range(start, end):
-			self.log.info(f"No oligos to discard in range [{start}:{end}).")
+    def reset_threshold(self):
+        self.apply_threshold(1)
 
-	def __discard_oligos_in_range(self, start, end):
-		if start >= end: return False
-		start_condition = self.data['end'] < start
-		end_condition = self.data['start'] >= end
-		keep_condition = np.logical_or(start_condition, end_condition)
-		nDiscarded = self.oligos_in_focus_window.sum()-keep_condition.sum()
-		self.__apply_keep_condition(keep_condition)
-		self.log.info(f"Discarded {nDiscarded}" +
-			f" oligos from the [{start}:{end}) range.")
-		return True
+    def discard_focused_oligos_safeDist(self, safeDist):
+        # Discard focused oligos that are not within a safe distance from the
+        # CFR borders
+        start = self.data.loc[self.oligos_in_focus_window, "start"].min()
+        end = self.data.loc[self.oligos_in_focus_window, "end"].max() + 1
+        self.__discard_oligos_in_range(start + safeDist, end - safeDist)
 
-	def __apply_keep_condition(self, keep_condition):
-		self._data = self._data.loc[keep_condition, :]
-		self._oligos_in_focus_window = self._oligos_in_focus_window[
-			keep_condition]
-		self._oligos_passing_score_filter = self._oligos_passing_score_filter[
-			keep_condition]
+    def discard_focused_oligos_safeN(self, safeN, D):
+        # Discard focused oligos that are neither the first nor the last safeN
+
+        start = (
+            self.data.loc[self.oligos_in_focus_window, "start"].values[0]
+            + len(self.data.loc[self.oligos_in_focus_window, "seq"].values[0])
+            + D
+        )
+        end = (
+            self.data.loc[self.oligos_in_focus_window, "end"].values[-1]
+            + len(self.data.loc[self.oligos_in_focus_window, "seq"].values[-1])
+            + D
+        )
+
+        oData = self.get_focused_oligos()
+
+        c = 1
+        while c <= safeN:
+            passing_oData = oData.loc[oData["start"] > start, :]
+            if 0 == passing_oData.shape[0]:
+                self.log.info("Not enough oligos, skipped discard step.")
+                return
+            start = (
+                passing_oData["start"].values[0]
+                + len(passing_oData["seq"].values[0])
+                + D
+            )
+            c += 1
+
+        c = 1
+        while c <= safeN:
+            passing_oData = oData.loc[oData["end"] <= start]
+            if 0 == passing_oData.shape[-1]:
+                self.log.info("Not enough oligos, skipped discard step.")
+                return
+            end = (
+                passing_oData["end"].values[-1]
+                - len(passing_oData["seq"].values[-1])
+                - D
+            )
+            c += 1
+
+        if not self.__discard_oligos_in_range(start, end):
+            self.log.info(f"No oligos to discard in range [{start}:{end}).")
+
+    def __discard_oligos_in_range(self, start, end):
+        if start >= end:
+            return False
+        start_condition = self.data["end"] < start
+        end_condition = self.data["start"] >= end
+        keep_condition = np.logical_or(start_condition, end_condition)
+        nDiscarded = self.oligos_in_focus_window.sum() - keep_condition.sum()
+        self.__apply_keep_condition(keep_condition)
+        self.log.info(
+            f"Discarded {nDiscarded}" + f" oligos from the [{start}:{end}) range."
+        )
+        return True
+
+    def __apply_keep_condition(self, keep_condition):
+        self._data = self._data.loc[keep_condition, :]
+        self._oligos_in_focus_window = self._oligos_in_focus_window[keep_condition]
+        self._oligos_passing_score_filter = self._oligos_passing_score_filter[
+            keep_condition
+        ]
+
 
 class OligoProbe(object):
-	"""Converts a DataFrame of oligo data into an OligoProbe."""
+    """Converts a DataFrame of oligo data into an OligoProbe."""
 
-	def __init__(self, oligo_data):
-		super(OligoProbe, self).__init__()
-		self.data = oligo_data
+    def __init__(self, oligo_data):
+        super(OligoProbe, self).__init__()
+        self.data = oligo_data
 
-	@property
-	def data(self):
-		return self._data.copy()
-	
-	@data.setter
-	def data(self, oligo_data):
-		assert isinstance(oligo_data, pd.DataFrame)
-		required_columns = ["start", "end", "Tm"]
-		assert all([col in oligo_data.columns for col in required_columns])
-		self._data = oligo_data
-		self._range = (self._data['start'].min(), self._data['end'].max())
-		self._size = self._range[1] - self._range[0]
-		oDists = self._data['start'].values[1:] - self._data['end'].values[:-1]
-		self._spread = np.std(oDists)
-		self._d_range = (oDists.min(), oDists.max())
-		self._d_mean = oDists.mean()
-		self._tm_range = (self._data['Tm'].min(), self._data['Tm'].max())
+    @property
+    def data(self):
+        return self._data.copy()
 
-	@property
-	def n_oligos(self):
-		return self._data.shape[0]
+    @data.setter
+    def data(self, oligo_data):
+        assert isinstance(oligo_data, pd.DataFrame)
+        required_columns = ["start", "end", "Tm"]
+        assert all([col in oligo_data.columns for col in required_columns])
+        self._data = oligo_data
+        self._range = (self._data["start"].min(), self._data["end"].max())
+        self._size = self._range[1] - self._range[0]
+        oDists = self._data["start"].values[1:] - self._data["end"].values[:-1]
+        self._spread = np.std(oDists)
+        self._d_range = (oDists.min(), oDists.max())
+        self._d_mean = oDists.mean()
+        self._tm_range = (self._data["Tm"].min(), self._data["Tm"].max())
 
-	@property
-	def path(self):
-		return self._data.index
+    @property
+    def n_oligos(self):
+        return self._data.shape[0]
 
-	@property
-	def range(self):
-		return self._range
+    @property
+    def path(self):
+        return self._data.index
 
-	@property
-	def tm_range(self):
-		return self._tm_range
+    @property
+    def range(self):
+        return self._range
 
-	@property
-	def d_range(self):
-		return self._d_range
+    @property
+    def tm_range(self):
+        return self._tm_range
 
-	@property
-	def d_mean(self):
-		return self._d_mean
+    @property
+    def d_range(self):
+        return self._d_range
 
-	@property
-	def spread(self):
-		return self._spread
-	
-	@property
-	def size(self):
-		return self._size
+    @property
+    def d_mean(self):
+        return self._d_mean
 
-	@property
-	def featDF(self):
-		df = pd.DataFrame([self.range[0], self.range[1], self.n_oligos,
-			self.size, self.spread,
-			self.d_range[0], self.d_range[1], self.d_mean,
-			np.diff(self.tm_range)[0]]).transpose()
-		df.columns = ["start", "end", "nOligos", "size",
-			"spread", "d_min", "d_max", "d_mean", "tm_range"]
-		return df
+    @property
+    def spread(self):
+        return self._spread
 
-	def __repr__(self):
-		rep  = f"<OligoProbe[{self.range[0]}:{self.range[1]}"
-		rep += f":{self.size}:{self.spread}]>"
-		return rep
+    @property
+    def size(self):
+        return self._size
 
-	def count_shared_oligos(self, probe):
-		# Counts oligos shared with another probe
-		# based on their paths
-		return np.intersect1d(self.path, probe.path).shape[0]
+    @property
+    def featDF(self):
+        df = pd.DataFrame(
+            [
+                self.range[0],
+                self.range[1],
+                self.n_oligos,
+                self.size,
+                self.spread,
+                self.d_range[0],
+                self.d_range[1],
+                self.d_mean,
+                np.diff(self.tm_range)[0],
+            ]
+        ).transpose()
+        df.columns = [
+            "start",
+            "end",
+            "nOligos",
+            "size",
+            "spread",
+            "d_min",
+            "d_max",
+            "d_mean",
+            "tm_range",
+        ]
+        return df
 
-	def export(self, path):
-		assert not os.path.isfile(path)
-		if os.path.isdir(path):
-			shutil.rmtree(path)
-		os.mkdir(path)
+    def __repr__(self):
+        rep = f"<OligoProbe[{self.range[0]}:{self.range[1]}"
+        rep += f":{self.size}:{self.spread}]>"
+        return rep
 
-		self.featDF.to_csv(os.path.join(path, "probe.tsv"), "\t", index = False)
-		self.data.to_csv(os.path.join(path, "oligos.tsv"), "\t", index = False)
+    def count_shared_oligos(self, probe):
+        # Counts oligos shared with another probe
+        # based on their paths
+        return np.intersect1d(self.path, probe.path).shape[0]
 
-		with open(os.path.join(path, "probe.fa"), "w+") as BH:
-			for i in range(self.data.shape[0]):
-				oligo = self.data.iloc[i]
-				BH.write(f">{oligo['name']}:" +
-					f"{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n")
-				BH.write(f"{oligo['seq']}\n")
+    def export(self, path):
+        assert not os.path.isfile(path)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        os.mkdir(path)
+
+        self.featDF.to_csv(os.path.join(path, "probe.tsv"), "\t", index=False)
+        self.data.to_csv(os.path.join(path, "oligos.tsv"), "\t", index=False)
+
+        with open(os.path.join(path, "probe.fa"), "w+") as BH:
+            for i in range(self.data.shape[0]):
+                oligo = self.data.iloc[i]
+                BH.write(
+                    f">{oligo['name']}:"
+                    + f"{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n"
+                )
+                BH.write(f"{oligo['seq']}\n")
+
 
 class OligoPathBuilder(object):
-	"""OligoPathBuilder contains methods to select non-overlapping sets of
-	oligos (i.e., probes) from an oligo DataFrame in input."""
+    """OligoPathBuilder contains methods to select non-overlapping sets of
+    oligos (i.e., probes) from an oligo DataFrame in input."""
 
-	N = int(48)			# Number of oligos per probe
-	D = int(2)			# Minimum distance between consecutive oligos
-	Tr = 10.0			# Melting temperature range half-width
-	Ps = int(10000)		# Probe size threshold, in nt (Ps > 1)
-	Ph = .1				# Maximum hole size in probe as fraction of probe size
-	Po = .5				# Probe oligo intersection threshold for path reduction
+    N = int(48)  # Number of oligos per probe
+    D = int(2)  # Minimum distance between consecutive oligos
+    Tr = 10.0  # Melting temperature range half-width
+    Ps = int(10000)  # Probe size threshold, in nt (Ps > 1)
+    Ph = 0.1  # Maximum hole size in probe as fraction of probe size
+    Po = 0.5  # Probe oligo intersection threshold for path reduction
 
-	def __init__(self):
-		super(OligoPathBuilder, self).__init__()
+    def __init__(self):
+        super(OligoPathBuilder, self).__init__()
 
-	def _assert(self):
-		assert_type(self.N, int, "N")
-		assert_nonNeg(self.N, "N")
+    def _assert(self):
+        assert_type(self.N, int, "N")
+        assert_nonNeg(self.N, "N")
 
-		assert_type(self.D, int, "D")
-		assert_nonNeg(self.D, "D")
+        assert_type(self.D, int, "D")
+        assert_nonNeg(self.D, "D")
 
-		assert_type(self.Tr, float, "Tr")
-		assert_nonNeg(self.Tr, "Tr")
+        assert_type(self.Tr, float, "Tr")
+        assert_nonNeg(self.Tr, "Tr")
 
-		assert_type(self.Ps, int, "Ps")
-		assert self.Ps > 1
+        assert_type(self.Ps, int, "Ps")
+        assert self.Ps > 1
 
-		assert_type(self.Ph, float, "Ph")
-		assert_inInterv(self.Ph, 0, 1, "Ph")
+        assert_type(self.Ph, float, "Ph")
+        assert_inInterv(self.Ph, 0, 1, "Ph")
 
-		assert_type(self.Po, float, "Po")
-		assert_inInterv(self.Po, 0, 1, "Po")
+        assert_type(self.Po, float, "Po")
+        assert_inInterv(self.Po, 0, 1, "Po")
 
-	@staticmethod
-	def get_non_overlapping_paths(oData, D):
-		# Gets all paths of consecutive non-overlapping oligos with minimum
-		# distance equal to D
-		assert_type(oData, pd.DataFrame, "oData")
+    @staticmethod
+    def get_non_overlapping_paths(oData, D):
+        # Gets all paths of consecutive non-overlapping oligos with minimum
+        # distance equal to D
+        assert_type(oData, pd.DataFrame, "oData")
 
-		edges = []
-		start_positions = oData["start"].values
-		end_positions = oData["end"].values
+        edges = []
+        start_positions = oData["start"].values
+        end_positions = oData["end"].values
 
-		for i in range(oData.shape[0]):
-			edges.append(np.logical_or(
-				end_positions+D < oData["start"].values[i],
-				start_positions-D >= oData["end"].values[i]
-			))
+        for i in range(oData.shape[0]):
+            edges.append(
+                np.logical_or(
+                    end_positions + D < oData["start"].values[i],
+                    start_positions - D >= oData["end"].values[i],
+                )
+            )
 
-		A = np.vstack(edges).astype('i')
+        A = np.vstack(edges).astype("i")
 
-		path_set = set()
-		path_start_set = set()
-		for i in range(A.shape[0]-1):
-			if i in path_start_set:
-				continue
-			if 0 != len(A[i, i+1].nonzero()[0]):
-				continue
+        path_set = set()
+        path_start_set = set()
+        for i in range(A.shape[0] - 1):
+            if i in path_start_set:
+                continue
+            if 0 != len(A[i, i + 1].nonzero()[0]):
+                continue
 
-			path = [i]
-			k = i
-			if 1 in A[k,(k+1):]:
-				j = A[k,(k+1):].argmax()+k+1
-				path.append(j)
-			else:
-				continue
+            path = [i]
+            k = i
+            if 1 in A[k, (k + 1) :]:
+                j = A[k, (k + 1) :].argmax() + k + 1
+                path.append(j)
+            else:
+                continue
 
-			while (j+1) < A.shape[0]:
-				k = j
-				if 1 in A[k,(k+1):]:
-					j = A[k,(k+1):].argmax()+k+1
-					path.append(j)
-				else:
-					break
+            while (j + 1) < A.shape[0]:
+                k = j
+                if 1 in A[k, (k + 1) :]:
+                    j = A[k, (k + 1) :].argmax() + k + 1
+                    path.append(j)
+                else:
+                    break
 
-			path_set.add(tuple(path))
-			path_start_set.add(path[0])
+            path_set.add(tuple(path))
+            path_start_set.add(path[0])
 
-		return path_set
+        return path_set
 
-	def filter_paths(self, path_set, oData):
-		# Selects oligo paths based on length, melting temperature, size, and
-		# presence of gaps.
-		assert_type(oData, pd.DataFrame, "oData")
+    def filter_paths(self, path_set, oData):
+        # Selects oligo paths based on length, melting temperature, size, and
+        # presence of gaps.
+        assert_type(oData, pd.DataFrame, "oData")
 
-		exit_polls = {'P':0, 'N':0, 'S':0, 'H':0, 'T':0}
+        exit_polls = {"P": 0, "N": 0, "S": 0, "H": 0, "T": 0}
 
-		sized_paths = set()
-		for path in list(path_set):
-			if path in sized_paths: continue
-			if self.N > len(path):
-				exit_polls['N'] = exit_polls['N'] + 1
-				continue
-			if self.N == len(path):
-				sized_paths.add(path)
-			else:
-				for j in range(len(path) - self.N + 1):
-					subpath = path[j:(j + self.N)]
-					sized_paths.add(subpath)
+        sized_paths = set()
+        for path in list(path_set):
+            if path in sized_paths:
+                continue
+            if self.N > len(path):
+                exit_polls["N"] = exit_polls["N"] + 1
+                continue
+            if self.N == len(path):
+                sized_paths.add(path)
+            else:
+                for j in range(len(path) - self.N + 1):
+                    subpath = path[j : (j + self.N)]
+                    sized_paths.add(subpath)
 
-		selected_paths = set()
-		for path in list(sized_paths):
-			if path in selected_paths: continue
-			passed, comment = self.__path_passes(path, oData)
-			exit_polls[comment] = exit_polls[comment] + 1
-			if not passed: continue
-			selected_paths.add(path)
-		
-		comment = "".join([f"{r}{c}" for (c,r) in exit_polls.items()])
-		return (list(selected_paths), comment)
+        selected_paths = set()
+        for path in list(sized_paths):
+            if path in selected_paths:
+                continue
+            passed, comment = self.__path_passes(path, oData)
+            exit_polls[comment] = exit_polls[comment] + 1
+            if not passed:
+                continue
+            selected_paths.add(path)
 
-	def __path_passes(self, path, oData):
-		if not isinstance(path, list): path = list(path)
-		pData = oData.iloc[path, :]
-		probe_size = pData['end'].values[-1]
-		probe_size -= pData['start'].values[0]
-		if self.Ps < probe_size:
-			return (False, 'S')
-		dData = pData['start'].values[1:] - pData['end'].values[:-1]
-		max_hole_size = dData.max()
-		if self.Ph * probe_size < max_hole_size:
-			return (False, 'H')
-		Tm_range = pData['Tm'].max()-pData['Tm'].min()
-		if 2*self.Tr < Tm_range:
-			return (False, 'T')
-		return (True, 'P')
+        comment = "".join([f"{r}{c}" for (c, r) in exit_polls.items()])
+        return (list(selected_paths), comment)
 
-	@staticmethod
-	def convert_paths_to_probes(path_list, oData):
-		# Converts a list of paths into a list of probes
-		assert_type(path_list, list, "path list")
-		probe_list = []
-		if 0 != len(path_list):
-			for path in path_list:
-				probe_list.append(OligoProbeBuilder.path2probe(path, oData))
-		return probe_list
+    def __path_passes(self, path, oData):
+        if not isinstance(path, list):
+            path = list(path)
+        pData = oData.iloc[path, :]
+        probe_size = pData["end"].values[-1]
+        probe_size -= pData["start"].values[0]
+        if self.Ps < probe_size:
+            return (False, "S")
+        dData = pData["start"].values[1:] - pData["end"].values[:-1]
+        max_hole_size = dData.max()
+        if self.Ph * probe_size < max_hole_size:
+            return (False, "H")
+        Tm_range = pData["Tm"].max() - pData["Tm"].min()
+        if 2 * self.Tr < Tm_range:
+            return (False, "T")
+        return (True, "P")
 
-	@staticmethod
-	def path2probe(path, oData):
-		# Convert an oligo path into an OligoProbe
-		return OligoProbe(oData.iloc[list(path), :])
+    @staticmethod
+    def convert_paths_to_probes(path_list, oData):
+        # Converts a list of paths into a list of probes
+        assert_type(path_list, list, "path list")
+        probe_list = []
+        if 0 != len(path_list):
+            for path in path_list:
+                probe_list.append(OligoProbeBuilder.path2probe(path, oData))
+        return probe_list
+
+    @staticmethod
+    def path2probe(path, oData):
+        # Convert an oligo path into an OligoProbe
+        return OligoProbe(oData.iloc[list(path), :])
+
 
 class OligoProbeBuilder(OligoPathBuilder):
-	"""Class to build OligoProbe objects."""
+    """Class to build OligoProbe objects."""
 
-	k = None
-	F = (0, 100)		# Threshold on number of off-targets (range)
-	Gs = (0.0, 0.5)		# dG of SS either as kcal/mol (negative)
-						#  or as fraction dG of hybrid (0<=Gs<=1)
-						#  (range)
-	Ot = .1				# Step for oligo score relaxation
+    k = None
+    F = (0, 100)  # Threshold on number of off-targets (range)
+    Gs = (0.0, 0.5)  # dG of SS either as kcal/mol (negative)
+    #  or as fraction dG of hybrid (0<=Gs<=1)
+    #  (range)
+    Ot = 0.1  # Step for oligo score relaxation
 
-	def __init__(self):
-		super(OligoProbeBuilder, self).__init__()
+    def __init__(self):
+        super(OligoProbeBuilder, self).__init__()
 
-	@property
-	def config(self):
-		config = cp.ConfigParser()
-		config['AIM'] = {
-			'Oligo(s) number' : self.N
-		}
-		if not isinstance(self.k, type(None)):
-			config['AIM']['Oligo length (nt)'] = str(self.k)
-		config['OLIGO FILTERS'] = {
-			'Off-target threshold' : self.F,
-			'Secondary structure dG threshold' : self.Gs,
-			'Oligo score relaxation step' : self.Ot
-		}
-		config['PROBE FILTERS'] = {
-			'Melting temperature range (degC)' : self.Tr,
-			'Min. consecutive oligo distance (nt)' : self.D,
-			'Probe size threshold' : self.Ps,
-			'Maximum hole size' : self.Ph
-		}
-		return config
+    @property
+    def config(self):
+        config = cp.ConfigParser()
+        config["AIM"] = {"Oligo(s) number": self.N}
+        if not isinstance(self.k, type(None)):
+            config["AIM"]["Oligo length (nt)"] = str(self.k)
+        config["OLIGO FILTERS"] = {
+            "Off-target threshold": self.F,
+            "Secondary structure dG threshold": self.Gs,
+            "Oligo score relaxation step": self.Ot,
+        }
+        config["PROBE FILTERS"] = {
+            "Melting temperature range (degC)": self.Tr,
+            "Min. consecutive oligo distance (nt)": self.D,
+            "Probe size threshold": self.Ps,
+            "Maximum hole size": self.Ph,
+        }
+        return config
 
-	def _assert(self):
-		OligoPathBuilder._assert(self)
+    def _assert(self):
+        OligoPathBuilder._assert(self)
 
-		if not isinstance(self.k, type(None)):
-			assert_type(self.k, int, "k")
-			assert_nonNeg(self.k, "k")		
-			assert (self.k+self.D)*self.N <= self.Ps
-	
-		assert_type(self.F, tuple, "F")
-		assert 2 == len(self.F)
-		for i in range(2):
-			assert_type(self.F[i], int, f"F[{i}]")
-			assert self.F[i] >= 0
-		assert self.F[1] >= self.F[0]
+        if not isinstance(self.k, type(None)):
+            assert_type(self.k, int, "k")
+            assert_nonNeg(self.k, "k")
+            assert (self.k + self.D) * self.N <= self.Ps
 
-		assert_type(self.Gs, tuple, "Gs")
-		assert 2 == len(self.Gs)
-		for i in range(2):
-			assert_type(self.Gs[i], float, f"Gs[{i}]")
-			assert self.Gs[i] <= 1
-		assert all(np.array(self.Gs) < 0) or all(np.array(self.Gs) >= 0)
-		if self.Gs[0] >= 0:
-			assert self.Gs[1] >= self.Gs[0]
-		else:
-			assert self.Gs[1] <= self.Gs[0]
+        assert_type(self.F, tuple, "F")
+        assert 2 == len(self.F)
+        for i in range(2):
+            assert_type(self.F[i], int, f"F[{i}]")
+            assert self.F[i] >= 0
+        assert self.F[1] >= self.F[0]
 
-		assert_type(self.Ot, float, "Ot")
-		assert 0 < self.Ot and 1 >= self.Ot
+        assert_type(self.Gs, tuple, "Gs")
+        assert 2 == len(self.Gs)
+        for i in range(2):
+            assert_type(self.Gs[i], float, f"Gs[{i}]")
+            assert self.Gs[i] <= 1
+        assert all(np.array(self.Gs) < 0) or all(np.array(self.Gs) >= 0)
+        if self.Gs[0] >= 0:
+            assert self.Gs[1] >= self.Gs[0]
+        else:
+            assert self.Gs[1] <= self.Gs[0]
 
-	def get_prologue(self):
-		s  = f"* OligoProbeBuilder *\n\n"
-		s += f"Aim to build probes with {self.N} oligos each.\n"
-		s += f"Off-target threshold range set at {self.F}.\n"
-		if isinstance(self.Gs[0], int):
-			s += f"Threshold on the delta free energy of the most stable"
-			s += f" secondary structure set at range {self.Gs} kcal/mol.\n"
-		else:
-			s += f"Threshold on the delta free energy of the most stable"
-			s += f" secondary structure\nset at range"
-			s += f" {[t*100 for t in self.Gs]}% of the delta free energy of"
-			s += f" hybridization.\n"
+        assert_type(self.Ot, float, "Ot")
+        assert 0 < self.Ot and 1 >= self.Ot
 
-		s += f"\nMelting temperature range of {2*self.Tr} degC.\n"
-		s += f"Minimum distance between consecutive oligos in a probe"
-		s += f" set at {self.D} nt.\n"
-		s += f"Probe size threshold set at {self.Ps} nt.\n"
-		s += f"Reducing probes when oligo intersection fraction is equal to"
-		s += f" or greater than {self.Po}.\n"
+    def get_prologue(self):
+        s = f"* OligoProbeBuilder *\n\n"
+        s += f"Aim to build probes with {self.N} oligos each.\n"
+        s += f"Off-target threshold range set at {self.F}.\n"
+        if isinstance(self.Gs[0], int):
+            s += f"Threshold on the delta free energy of the most stable"
+            s += f" secondary structure set at range {self.Gs} kcal/mol.\n"
+        else:
+            s += f"Threshold on the delta free energy of the most stable"
+            s += f" secondary structure\nset at range"
+            s += f" {[t*100 for t in self.Gs]}% of the delta free energy of"
+            s += f" hybridization.\n"
 
-		return s
+        s += f"\nMelting temperature range of {2*self.Tr} degC.\n"
+        s += f"Minimum distance between consecutive oligos in a probe"
+        s += f" set at {self.D} nt.\n"
+        s += f"Probe size threshold set at {self.Ps} nt.\n"
+        s += f"Reducing probes when oligo intersection fraction is equal to"
+        s += f" or greater than {self.Po}.\n"
 
-	def start(self, oGroup, window, cfr_step, logger):
-		self._assert()
-		return self.__build_probe_candidates(oGroup, window, cfr_step, logger)
+        return s
 
-	def __build_probe_candidates(self, oGroup, window, cfr_step, logger):
-		# Applies oligo filters to the oligo group,
-		# expands the focus group if needed, and build probe candidates
-		
-		if np.isnan(window['cfr_start']):
-			oGroup.focus_all()
-		else:
-			oGroup.set_focus_window(window['cfr_start'], window['cfr_end'])
-			oGroup.expand_focus_to_n_oligos(self.N)
+    def start(self, oGroup, window, cfr_step, logger):
+        self._assert()
+        return self.__build_probe_candidates(oGroup, window, cfr_step, logger)
 
-		probe_list = self.__explore_filter(oGroup, logger)
-		if not np.isnan(window['cfr_start']):
-			while 0 == len(probe_list):
-				oGroup.reset_threshold()
-				if oGroup.focus_window_size >= self.Ps:
-					oGroup.discard_focused_oligos_safeN(self.N-1, self.D)
-				if not oGroup.expand_focus_by_step(cfr_step):
-					break
-				probe_list = self.__explore_filter(oGroup, logger)
-		
-		return probe_list
+    def __build_probe_candidates(self, oGroup, window, cfr_step, logger):
+        # Applies oligo filters to the oligo group,
+        # expands the focus group if needed, and build probe candidates
 
-	def __explore_filter(self, oGroup, logger):
-		# Explores the 0-to-max_score score threshold range and stops as soon as
-		# one probe candidate passes all user-defined thresholds
-		
-		if oGroup.focus_window_size < self.Ps:
-			max_score = 0
-			logger.warning("Score relaxation deactivated when focus region" +
-				" size is smaller than probe size threshold.")
-		else:
-			max_score = 1
+        if np.isnan(window["cfr_start"]):
+            oGroup.focus_all()
+        else:
+            oGroup.set_focus_window(window["cfr_start"], window["cfr_end"])
+            oGroup.expand_focus_to_n_oligos(self.N)
 
-		nOligos_in_focus_window = oGroup.get_n_focused_oligos(True)
+        probe_list = self.__explore_filter(oGroup, logger)
+        if not np.isnan(window["cfr_start"]):
+            while 0 == len(probe_list):
+                oGroup.reset_threshold()
+                if oGroup.focus_window_size >= self.Ps:
+                    oGroup.discard_focused_oligos_safeN(self.N - 1, self.D)
+                if not oGroup.expand_focus_by_step(cfr_step):
+                    break
+                probe_list = self.__explore_filter(oGroup, logger)
 
-		score_thr = 0
-		oGroup.apply_threshold(score_thr)
-		nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
-		logger.info(f"Set oligo score threshold at {score_thr:.3f}" +
-			f" ({nOligos_prev_score_thr} oligos usable)...")
+        return probe_list
 
-		if 0 == max_score and 0 == nOligos_prev_score_thr:
-			return([])
+    def __explore_filter(self, oGroup, logger):
+        # Explores the 0-to-max_score score threshold range and stops as soon as
+        # one probe candidate passes all user-defined thresholds
 
-		while 0 == nOligos_prev_score_thr and score_thr <= max_score-self.Ot:
-			score_thr += self.Ot
-			oGroup.apply_threshold(score_thr)
-			nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
-			logger.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
-				f" ({nOligos_prev_score_thr} oligos usable)...")
+        if oGroup.focus_window_size < self.Ps:
+            max_score = 0
+            logger.warning(
+                "Score relaxation deactivated when focus region"
+                + " size is smaller than probe size threshold."
+            )
+        else:
+            max_score = 1
 
-		probe_list = self.__get_non_overlapping_probes(
-			oGroup.get_focused_oligos(True), logger)
-		while 0 == len(probe_list):
-			score_thr += self.Ot
-			if score_thr > max_score:
-				break
+        nOligos_in_focus_window = oGroup.get_n_focused_oligos(True)
 
-			oGroup.apply_threshold(score_thr)
-			nOligos = oGroup.get_n_focused_oligos()
-			nOligosUsable = oGroup.get_n_focused_oligos(True)
-			if nOligosUsable == nOligos_prev_score_thr:
-				continue
-			if 0 == nOligosUsable:
-				continue
+        score_thr = 0
+        oGroup.apply_threshold(score_thr)
+        nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
+        logger.info(
+            f"Set oligo score threshold at {score_thr:.3f}"
+            + f" ({nOligos_prev_score_thr} oligos usable)..."
+        )
 
-			logger.info(f"Relaxed oligo score threshold to {score_thr:.3f}" +
-				f" ({nOligosUsable} oligos usable)...")
-			probe_list = self.__get_non_overlapping_probes(
-				oGroup.get_focused_oligos(True), logger)
+        if 0 == max_score and 0 == nOligos_prev_score_thr:
+            return []
 
-			if nOligosUsable == nOligos_in_focus_window:
-				logger.warning(
-					"All oligos included. Score relaxation ineffective.")
-				break
-			nOligos_prev_score_thr = nOligosUsable
+        while 0 == nOligos_prev_score_thr and score_thr <= max_score - self.Ot:
+            score_thr += self.Ot
+            oGroup.apply_threshold(score_thr)
+            nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
+            logger.info(
+                f"Relaxed oligo score threshold to {score_thr:.3f}"
+                + f" ({nOligos_prev_score_thr} oligos usable)..."
+            )
 
-		return(probe_list)
+        probe_list = self.__get_non_overlapping_probes(
+            oGroup.get_focused_oligos(True), logger
+        )
+        while 0 == len(probe_list):
+            score_thr += self.Ot
+            if score_thr > max_score:
+                break
 
-	def __get_non_overlapping_probes(self, oData, logger, verbosity = True):
-		# Builds non overlapping oligo paths from an oligo data table, filters
-		# them based on class attributes, and then converts the remaining ones
-		# to OligoProbe objects.
-		
+            oGroup.apply_threshold(score_thr)
+            nOligos = oGroup.get_n_focused_oligos()
+            nOligosUsable = oGroup.get_n_focused_oligos(True)
+            if nOligosUsable == nOligos_prev_score_thr:
+                continue
+            if 0 == nOligosUsable:
+                continue
 
-		paths = self.get_non_overlapping_paths(oData, self.D)
-		if 0 == len(paths):
-			logger.warning("No oligo paths found.")
-			return []
+            logger.info(
+                f"Relaxed oligo score threshold to {score_thr:.3f}"
+                + f" ({nOligosUsable} oligos usable)..."
+            )
+            probe_list = self.__get_non_overlapping_probes(
+                oGroup.get_focused_oligos(True), logger
+            )
 
-		pathMaxLen = np.max([len(p) for p in list(paths)])
-		if verbosity:
-			nPaths = len(paths)
-			logger.info(f"Found {nPaths} sets with up to {pathMaxLen} " +
-				f"non-overlapping oligos.")
-		if pathMaxLen < self.N:
-			logger.warning(f"Longest path is shorter than requested. " + 
-				"Skipped.")
-			return []
+            if nOligosUsable == nOligos_in_focus_window:
+                logger.warning("All oligos included. Score relaxation ineffective.")
+                break
+            nOligos_prev_score_thr = nOligosUsable
 
-		paths, comment = self.filter_paths(paths, oData)
-		if verbosity:
-			logger.info(f"{len(paths)}/{nPaths} oligo paths remaining " +
-				f"after filtering. ({comment})")
+        return probe_list
 
-		return self.convert_paths_to_probes(paths, oData)
+    def __get_non_overlapping_probes(self, oData, logger, verbosity=True):
+        # Builds non overlapping oligo paths from an oligo data table, filters
+        # them based on class attributes, and then converts the remaining ones
+        # to OligoProbe objects.
 
-	def reduce_probe_list(self, probe_list):
-		try:
-			if 0 == len(probe_list): return []
-			sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
+        paths = self.get_non_overlapping_paths(oData, self.D)
+        if 0 == len(paths):
+            logger.warning("No oligo paths found.")
+            return []
 
-			selected_probes = []
-			probe_ref = sorted_probes[0]
-			for probe in sorted_probes[1:-1]:
-				n_shared_oligos = probe_ref.count_shared_oligos(probe)
+        pathMaxLen = np.max([len(p) for p in list(paths)])
+        if verbosity:
+            nPaths = len(paths)
+            logger.info(
+                f"Found {nPaths} sets with up to {pathMaxLen} "
+                + f"non-overlapping oligos."
+            )
+        if pathMaxLen < self.N:
+            logger.warning(f"Longest path is shorter than requested. " + "Skipped.")
+            return []
 
-				if probe_ref.n_oligos == n_shared_oligos:
-					raise Exception("Encountered probe duplicates!")
+        paths, comment = self.filter_paths(paths, oData)
+        if verbosity:
+            logger.info(
+                f"{len(paths)}/{nPaths} oligo paths remaining "
+                + f"after filtering. ({comment})"
+            )
 
-				if self.Po * self.N <= n_shared_oligos:
-					probe_ref = self.select_probe_from_pair(probe_ref, probe)
-				else:
-					selected_probes.append(probe_ref)
-					probe_ref = probe
+        return self.convert_paths_to_probes(paths, oData)
 
-			if not probe_ref in selected_probes:
-				selected_probes.append(probe_ref)
+    def reduce_probe_list(self, probe_list):
+        try:
+            if 0 == len(probe_list):
+                return []
+            sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
 
-			n_shared_oligos = probe_ref.count_shared_oligos(sorted_probes[-1])
-			if self.Po * self.N > n_shared_oligos:
-				selected_probes.append(sorted_probes[-1])
+            selected_probes = []
+            probe_ref = sorted_probes[0]
+            for probe in sorted_probes[1:-1]:
+                n_shared_oligos = probe_ref.count_shared_oligos(probe)
 
-			return selected_probes
-		except Exception as e:
-			print(e)
-			raise
+                if probe_ref.n_oligos == n_shared_oligos:
+                    raise Exception("Encountered probe duplicates!")
 
-	def select_probe_from_pair(self, probeA, probeB):
-		if probeA.size < probeB.size:
-			return probeA
-		else:
-			return probeB
-		if np.diff(probeA.tm_range)[0] < np.diff(probeB.tm_range)[0]:
-			return probeA
-		else:
-			return probeB
-		if probeA.spread/probeA.d_mean < probeB.spread/probeB.d_mean:
-			return probeA
-		else:
-			return probeB
-		return probeA
+                if self.Po * self.N <= n_shared_oligos:
+                    probe_ref = self.select_probe_from_pair(probe_ref, probe)
+                else:
+                    selected_probes.append(probe_ref)
+                    probe_ref = probe
 
-	@staticmethod
-	def import_probes(ipath):
-		# Imports output from given directory path
-		assert os.path.isdir(ipath)
+            if not probe_ref in selected_probes:
+                selected_probes.append(probe_ref)
 
-		pPath = os.path.join(ipath, "probe_paths.tsv")
-		if not os.path.isfile(pPath): return []
+            n_shared_oligos = probe_ref.count_shared_oligos(sorted_probes[-1])
+            if self.Po * self.N > n_shared_oligos:
+                selected_probes.append(sorted_probes[-1])
 
-		oPath = os.path.join(ipath, "oligos.tsv")
-		if not os.path.isfile(oPath): return []
-		
-		oligos = pd.read_csv(oPath, "\t", index_col = 0)
-		paths = pd.read_csv(pPath, "\t", index_col = 0)
+            return selected_probes
+        except Exception as e:
+            print(e)
+            raise
 
-		probe_list = []
-		for p in paths.iloc[:, 0]:
-			probe_list.append(OligoProbe(oligos.loc[
-				[int(o) for o in p.split(",")]]))
+    def select_probe_from_pair(self, probeA, probeB):
+        if probeA.size < probeB.size:
+            return probeA
+        else:
+            return probeB
+        if np.diff(probeA.tm_range)[0] < np.diff(probeB.tm_range)[0]:
+            return probeA
+        else:
+            return probeB
+        if probeA.spread / probeA.d_mean < probeB.spread / probeB.d_mean:
+            return probeA
+        else:
+            return probeB
+        return probeA
 
-		return probe_list
+    @staticmethod
+    def import_probes(ipath):
+        # Imports output from given directory path
+        assert os.path.isdir(ipath)
 
-	@staticmethod
-	def export_probes(probe_list, opath):
-		# Exports a list of probes to a directory
-		assert os.path.isdir(opath)
+        pPath = os.path.join(ipath, "probe_paths.tsv")
+        if not os.path.isfile(pPath):
+            return []
 
-		probe_df = pd.concat([p.featDF for p in probe_list], ignore_index=True)
-		probe_df.sort_values("start", inplace = True)
-		probe_df.to_csv(os.path.join(opath, "probe_feat.tsv"), "\t")
+        oPath = os.path.join(ipath, "oligos.tsv")
+        if not os.path.isfile(oPath):
+            return []
 
-		pd.concat([p.data for p in probe_list]).drop_duplicates().to_csv(
-			os.path.join(opath, "oligos.tsv"), "\t")
+        oligos = pd.read_csv(oPath, "\t", index_col=0)
+        paths = pd.read_csv(pPath, "\t", index_col=0)
 
-		probe_paths = []
-		for pi in range(len(probe_list)):
-			probe_paths.append([",".join([str(x)
-				for x in probe_list[pi].data.index.tolist()])])
-		probe_paths = pd.DataFrame(probe_paths)
-		probe_paths.columns = ["cs_oligos"]
-		probe_paths.to_csv(os.path.join(opath, "probe_paths.tsv"), "\t")
+        probe_list = []
+        for p in paths.iloc[:, 0]:
+            probe_list.append(OligoProbe(oligos.loc[[int(o) for o in p.split(",")]]))
+
+        return probe_list
+
+    @staticmethod
+    def export_probes(probe_list, opath):
+        # Exports a list of probes to a directory
+        assert os.path.isdir(opath)
+
+        probe_df = pd.concat([p.featDF for p in probe_list], ignore_index=True)
+        probe_df.sort_values("start", inplace=True)
+        probe_df.to_csv(os.path.join(opath, "probe_feat.tsv"), "\t")
+
+        pd.concat([p.data for p in probe_list]).drop_duplicates().to_csv(
+            os.path.join(opath, "oligos.tsv"), "\t"
+        )
+
+        probe_paths = []
+        for pi in range(len(probe_list)):
+            probe_paths.append(
+                [",".join([str(x) for x in probe_list[pi].data.index.tolist()])]
+            )
+        probe_paths = pd.DataFrame(probe_paths)
+        probe_paths.columns = ["cs_oligos"]
+        probe_paths.to_csv(os.path.join(opath, "probe_paths.tsv"), "\t")
+
 
 class OligoProbeSet(object):
-	"""Set of non-overlapping probes built from windows."""
+    """Set of non-overlapping probes built from windows."""
 
-	def __init__(self, probe_list):
-		super(OligoProbeSet, self).__init__()
-		self.probe_list = probe_list
+    def __init__(self, probe_list):
+        super(OligoProbeSet, self).__init__()
+        self.probe_list = probe_list
 
-	@property
-	def probe_list(self):
-		return self._probe_list
+    @property
+    def probe_list(self):
+        return self._probe_list
 
-	@probe_list.setter
-	def probe_list(self, probe_list):
-		assert all([isinstance(p, OligoProbe) for p in probe_list])
-		self._probe_list = sorted(probe_list, key = lambda p: p.range[0])
-		self._probe_tm_ranges = [p.tm_range for p in self.probe_list]
-		self._tm_range = (np.min([t[0] for t in self._probe_tm_ranges]),
-			np.max([t[1] for t in self._probe_tm_ranges]))
-		self._sizes = [p.size for p in self.probe_list]
-		self._spreads = [p.spread for p in self.probe_list]
-		self._probe_ranges = [p.range for p in self.probe_list]
-		probe_starts = np.array([r[0] for r in self.probe_ranges])
-		probe_ends = np.array([r[1] for r in self.probe_ranges])
-		self._range = (probe_starts.min(), probe_ends.max())
-		self._ds = probe_starts[1:] - probe_ends[:-1]
-		self._d_mean = np.mean(self.ds)
-		self._d_range = (np.min(self.ds), np.max(self.ds))
-		tm = [p.data['Tm'].tolist() for p in self.probe_list]
-		self._oligo_tm = list(itertools.chain(*tm))
+    @probe_list.setter
+    def probe_list(self, probe_list):
+        assert all([isinstance(p, OligoProbe) for p in probe_list])
+        self._probe_list = sorted(probe_list, key=lambda p: p.range[0])
+        self._probe_tm_ranges = [p.tm_range for p in self.probe_list]
+        self._tm_range = (
+            np.min([t[0] for t in self._probe_tm_ranges]),
+            np.max([t[1] for t in self._probe_tm_ranges]),
+        )
+        self._sizes = [p.size for p in self.probe_list]
+        self._spreads = [p.spread for p in self.probe_list]
+        self._probe_ranges = [p.range for p in self.probe_list]
+        probe_starts = np.array([r[0] for r in self.probe_ranges])
+        probe_ends = np.array([r[1] for r in self.probe_ranges])
+        self._range = (probe_starts.min(), probe_ends.max())
+        self._ds = probe_starts[1:] - probe_ends[:-1]
+        self._d_mean = np.mean(self.ds)
+        self._d_range = (np.min(self.ds), np.max(self.ds))
+        tm = [p.data["Tm"].tolist() for p in self.probe_list]
+        self._oligo_tm = list(itertools.chain(*tm))
 
-	@property
-	def range(self):
-		return self._range
+    @property
+    def range(self):
+        return self._range
 
-	@property
-	def probe_ranges(self):
-		return self._probe_ranges
+    @property
+    def probe_ranges(self):
+        return self._probe_ranges
 
-	@property
-	def ds(self):
-		return self._ds
+    @property
+    def ds(self):
+        return self._ds
 
-	@property
-	def d_mean(self):
-		return self._d_mean
+    @property
+    def d_mean(self):
+        return self._d_mean
 
-	@property
-	def d_range(self):
-		return self._d_range
-	
-	@property
-	def tm_range(self):
-		return self._tm_range
+    @property
+    def d_range(self):
+        return self._d_range
 
-	@property
-	def probe_tm_ranges(self):
-		return self._probe_tm_ranges
-	
-	@property
-	def oligo_tm(self):
-		return self._oligo_tm
-	
-	@property
-	def sizes(self):
-		return self._sizes
+    @property
+    def tm_range(self):
+        return self._tm_range
 
-	@property
-	def spreads(self):
-		return self._spreads
+    @property
+    def probe_tm_ranges(self):
+        return self._probe_tm_ranges
 
-	@property
-	def featDF(self):
-		df = pd.DataFrame([self.range[0], self.range[1],
-			len(self.probe_list), np.diff(self.range)[0],
-			np.mean(self.sizes), np.std(self.sizes),
-			np.min(self.spreads), np.max(self.spreads),
-			np.mean(self.spreads), np.std(self.spreads),
-			self.d_range[0], self.d_range[1], self.d_mean, np.std(self.ds),
-			np.diff(self.tm_range)[0],
-			np.mean(self.oligo_tm), np.std(self.oligo_tm),
-			1/3*(np.std(self.sizes)/np.mean(self.sizes) +
-				np.std(self.spreads)/np.mean(self.spreads) +
-				np.std(self.oligo_tm)/np.mean(self.oligo_tm))
-		]).transpose()
-		df.columns = ["start", "end",
-			"nProbes", "size", "size_mean", "size_std",
-			"spread_min", "spread_max", "spread_mean", "spread_std",
-			"d_min", "d_max", "d_mean", "d_std",
-			"tm_range", "tm_mean", "tm_std", "score"]
-		return df
+    @property
+    def oligo_tm(self):
+        return self._oligo_tm
 
-	def export(self, path):
-		assert not os.path.isfile(path)
-		if os.path.isdir(path):
-			shutil.rmtree(path)
-		os.mkdir(path)
-		
-		self.featDF.to_csv(os.path.join(path, "set.tsv"), "\t", index = False)
+    @property
+    def sizes(self):
+        return self._sizes
 
-		pd.concat([p.featDF for p in self.probe_list]
-			).reset_index(drop = True).to_csv(
-			os.path.join(path, "probes.tsv"), "\t")
+    @property
+    def spreads(self):
+        return self._spreads
 
-		with open(os.path.join(path, "set.bed"), "w+") as BH:
-			for pi in range(len(self.probe_list)):
-				probe = self.probe_list[pi]
-				probe.export(os.path.join(path, f"probe_{pi}"))
-				for i in range(probe.data.shape[0]):
-					oligo = probe.data.iloc[i]
-					BH.write(f">probe_{pi}:{oligo['name']}" +
-						f":{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n")
-					BH.write(f"{probe.data.iloc[i]['seq']}\n")
+    @property
+    def featDF(self):
+        df = pd.DataFrame(
+            [
+                self.range[0],
+                self.range[1],
+                len(self.probe_list),
+                np.diff(self.range)[0],
+                np.mean(self.sizes),
+                np.std(self.sizes),
+                np.min(self.spreads),
+                np.max(self.spreads),
+                np.mean(self.spreads),
+                np.std(self.spreads),
+                self.d_range[0],
+                self.d_range[1],
+                self.d_mean,
+                np.std(self.ds),
+                np.diff(self.tm_range)[0],
+                np.mean(self.oligo_tm),
+                np.std(self.oligo_tm),
+                1
+                / 3
+                * (
+                    np.std(self.sizes) / np.mean(self.sizes)
+                    + np.std(self.spreads) / np.mean(self.spreads)
+                    + np.std(self.oligo_tm) / np.mean(self.oligo_tm)
+                ),
+            ]
+        ).transpose()
+        df.columns = [
+            "start",
+            "end",
+            "nProbes",
+            "size",
+            "size_mean",
+            "size_std",
+            "spread_min",
+            "spread_max",
+            "spread_mean",
+            "spread_std",
+            "d_min",
+            "d_max",
+            "d_mean",
+            "d_std",
+            "tm_range",
+            "tm_mean",
+            "tm_std",
+            "score",
+        ]
+        return df
+
+    def export(self, path):
+        assert not os.path.isfile(path)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        os.mkdir(path)
+
+        self.featDF.to_csv(os.path.join(path, "set.tsv"), "\t", index=False)
+
+        pd.concat([p.featDF for p in self.probe_list]).reset_index(drop=True).to_csv(
+            os.path.join(path, "probes.tsv"), "\t"
+        )
+
+        with open(os.path.join(path, "set.bed"), "w+") as BH:
+            for pi in range(len(self.probe_list)):
+                probe = self.probe_list[pi]
+                probe.export(os.path.join(path, f"probe_{pi}"))
+                for i in range(probe.data.shape[0]):
+                    oligo = probe.data.iloc[i]
+                    BH.write(
+                        f">probe_{pi}:{oligo['name']}"
+                        + f":{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n"
+                    )
+                    BH.write(f"{probe.data.iloc[i]['seq']}\n")
+
 
 class OligoProbeSetBuilder(Loggable):
-	"""Class to build OligoProbeSet objects."""
+    """Class to build OligoProbeSet objects."""
 
-	probe_set_list = []
+    probe_set_list = []
 
-	def __init__(self, out_path, logger = logging.getLogger()):
-		Loggable.__init__(self, logger)
-		assert not os.path.isfile(out_path)
-		self.out_path = out_path
-		if os.path.isdir(out_path):
-			shutil.rmtree(out_path)
-		os.mkdir(out_path)
+    def __init__(self, out_path, logger=logging.getLogger()):
+        Loggable.__init__(self, logger)
+        assert not os.path.isfile(out_path)
+        self.out_path = out_path
+        if os.path.isdir(out_path):
+            shutil.rmtree(out_path)
+        os.mkdir(out_path)
 
-	def build(self, probe_candidates):
-		nProbes = []
-		for (wSet, window_list) in probe_candidates.items():
-			window_list = list(window_list.values())
-			i = 0
-			while 0 == len( window_list[i]): i += 1
-			probe_set_list = [(p,) for p in window_list[i]]
-			#nProbes = [len(probes) for probes in window_list.values()]
-			#nProbeSets = np.sum([n for n in nProbes if 0 != n])
+    def build(self, probe_candidates):
+        nProbes = []
+        for (wSet, window_list) in probe_candidates.items():
+            window_list = list(window_list.values())
+            i = 0
+            while 0 == len(window_list[i]):
+                i += 1
+            probe_set_list = [(p,) for p in window_list[i]]
+            # nProbes = [len(probes) for probes in window_list.values()]
+            # nProbeSets = np.sum([n for n in nProbes if 0 != n])
 
-			for w in window_list[(i+1):]:
-				if 0 == len(w): continue
+            for w in window_list[(i + 1) :]:
+                if 0 == len(w):
+                    continue
 
-				current_probe_set_list = list(tuple(probe_set_list))
-				probe_set_list = []
+                current_probe_set_list = list(tuple(probe_set_list))
+                probe_set_list = []
 
-				for probe in w:
-					for probe_set in current_probe_set_list:
-						current_probe_set = list(probe_set)
-						current_probe_set.append(probe)
-						probe_set_list.append(current_probe_set)
+                for probe in w:
+                    for probe_set in current_probe_set_list:
+                        current_probe_set = list(probe_set)
+                        current_probe_set.append(probe)
+                        probe_set_list.append(current_probe_set)
 
-			self.probe_set_list.extend(probe_set_list)
-			self.log.info(f"Built {len(probe_set_list)} probe set candidates " +
-				f"from window set #{wSet+1}")
+            self.probe_set_list.extend(probe_set_list)
+            self.log.info(
+                f"Built {len(probe_set_list)} probe set candidates "
+                + f"from window set #{wSet+1}"
+            )
 
-		self.probe_set_list = [OligoProbeSet(ps)
-			for ps in self.probe_set_list]
-		self.log.info(f"Built {len(self.probe_set_list)} " +
-			"probe set candidates in total.")
+        self.probe_set_list = [OligoProbeSet(ps) for ps in self.probe_set_list]
+        self.log.info(
+            f"Built {len(self.probe_set_list)} " + "probe set candidates in total."
+        )
 
-		if 0 < len(self.probe_set_list):
-			pd.concat([ps.featDF for ps in self.probe_set_list]
-				).reset_index(drop = True).to_csv(
-				os.path.join(self.out_path, "probe_sets.tsv"), "\t")
+        if 0 < len(self.probe_set_list):
+            pd.concat([ps.featDF for ps in self.probe_set_list]).reset_index(
+                drop=True
+            ).to_csv(os.path.join(self.out_path, "probe_sets.tsv"), "\t")
 
-	def export(self):
-		self.log.info("Exporting probe sets...")
-		for psi in tqdm(range(len(self.probe_set_list)), desc = "Probe set"):
-			probe_set = self.probe_set_list[psi]
-			probe_set.export(os.path.join(self.out_path, f"probe_set_{psi}"))
+    def export(self):
+        self.log.info("Exporting probe sets...")
+        for psi in tqdm(range(len(self.probe_set_list)), desc="Probe set"):
+            probe_set = self.probe_set_list[psi]
+            probe_set.export(os.path.join(self.out_path, f"probe_set_{psi}"))
