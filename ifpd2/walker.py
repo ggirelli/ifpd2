@@ -241,17 +241,6 @@ class GenomicWindowSet(object):
                 self._w += 1
             if self.wid >= self.window_sets.shape[0] - 1:
                 self._reached_last_window = True
-        # logging.info(
-        #     "".join(
-        #         [
-        #             "Moved to window ",
-        #             f"{int(self.current_window['start'])}-",
-        #             f"{int(self.current_window['end'])}",
-        #             f" [{int(self.current_window['s'])}.",
-        #             f"{int(self.current_window['w'])}]",
-        #         ]
-        #     )
-        # )
 
     def export_window_set(self):
         self.window_sets.loc[
@@ -527,9 +516,9 @@ class Walker(GenomicWindowSet):
 
             if (win.transpose().values[0][1:] == self.current_window.values).all():
                 self.logger.info(
-                    "".join(
+                    " ".join(
                         [
-                            "Re-using previous results for window ",
+                            "Re-using previous results for window",
                             f"{self.window_tag} {self.window_range}",
                         ]
                     )
