@@ -10,6 +10,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### ...
 - ...
 
-## [0.0.1]
+## [0.0.1] - 2021-02-26
 
 [0.0.1] https://github.com/ggirelli/ifpd/releases/tag/v0.0.1  
