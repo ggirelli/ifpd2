@@ -23,7 +23,7 @@ Once you have `pipx` ready on your system, install the latest stable release of 
 
 ## Usage
 
-All `ifpd2` commands are accessible via the `ifpd2` keyword on the terminal. For each command, you can access its help page by using the `-h` option. More details on how to run `ifpd2` are available in the online [documentation](https://ggirelli.github.io/ifpd2/usage).
+All `ifpd2` commands are accessible via the `ifpd2` keyword on the terminal. For each command, you can access its help page by using the `-h` option. More details on how to run `ifpd2` are available in the online [documentation](https://ggirelli.github.io/ifpd2).
 
 ## Contributing
 
