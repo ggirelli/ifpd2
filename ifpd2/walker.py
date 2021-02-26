@@ -260,9 +260,10 @@ class Walker(GenomicWindowSet):
     __current_oligos: List = []
     __walk_results: Dict = {}
 
-    def __init__(self, db_path):
+    def __init__(self, db_path, logger=logging.getLogger()):
         GenomicWindowSet.__init__(self)
         self.__db = Database(db_path)
+        self.logger = logger
 
     @property
     def threads(self):
@@ -356,7 +357,7 @@ class Walker(GenomicWindowSet):
             nSets = int(self.window_sets["s"].max() + 1)
             s += f"Thus, a total of {nSets} window sets will be explored.\n"
 
-        logging.info(s)
+        self.logger.info(s)
 
     @property
     def walk_destination(self):
@@ -364,104 +365,124 @@ class Walker(GenomicWindowSet):
             return np.inf
         return self.E
 
-    def __parse_line_do(self, line, DBHpb, args, kwargs):
-        oligo_start, _ = [int(x) for x in line.strip().split("\t")[2:4]]
-        if oligo_start >= self.current_window["end"]:
-            DBHpb.clear()
+    def __finished_parsing(self, line, oligo_start, oligo_end, DBHpb, args, kwargs):
+        # Return:
+        #   None to stop parsing
+        #   True to parse in current window
+        #   Parsed output to append it
 
-            return self.process_window_asynch(
+        if oligo_start >= self.current_window["end"]:
+            # DBHpb.clear()
+
+            parsed_output = self.__process_window_async(
                 self.current_oligos,
                 self.current_window,
                 self.fprocess,
                 self.fpost,
                 *args,
                 opath=self.window_path,
-                loggerName=logging.name,
+                loggerName=self.logger.name,
                 **kwargs,
             )
 
             if self.reached_last_window:
-                logging.info("Reached last window")
-                return
+                self.logger.info("Reached last window")
+                return (None, "break")
 
             self.go_to_next_window()
             self._preprocess_window()
             self._load_windows_until_next_to_do()
             if self.reached_last_window and self._window_done():
-                logging.info("Reached last window and done")
-                return
+                self.logger.info("Reached last window and done")
+                return (None, "break")
 
             if 0 != len(self.current_oligos):
                 self.remove_oligos_starting_before(self.current_window["start"])
-            return True
-        return True
 
-    def __parse_line(self, line, DBHpb, args, kwargs):
-        _, oligo_end = [int(x) for x in line.strip().split("\t")[2:4]]
+            return (parsed_output, "append")
+        return (None, "continue")
 
-        parsed = self.__parse_line_do(line, DBHpb, args, kwargs)
-        if parsed is True:
-            if oligo_end > self.walk_destination:  # End reached
-                logging.info("Reached destination")
-                return
+    def __parse_line(self, line, oligo_start, oligo_end, DBHpb, args, kwargs):
+        if oligo_start >= self.current_window["start"]:
+            parsing_output, parsing_status = self.__finished_parsing(
+                line, oligo_start, oligo_end, DBHpb, args, kwargs
+            )
+            if parsing_status == "continue":
+                if oligo_end > self.walk_destination:  # End reached
+                    self.logger.info("Reached destination")
+                    return (None, "break")
 
-            oligo = Oligo(line, self.r)
-            self.fparse(oligo, *args, **kwargs)
+                oligo = Oligo(line, self.r)
+                self.fparse(oligo, *args, **kwargs)
 
-            if not np.isnan(oligo.score):
-                self.current_oligos.append(oligo)
+                if not np.isnan(oligo.score):
+                    self.current_oligos.append(oligo)
 
-            self.rw += 1
-        else:
-            return parsed
+                self.rw += 1
+            else:
+                return (parsing_output, parsing_status)
+        return (None, "continue")
 
     def __parse_database(self, DBHpb, args, kwargs):
         exec_results = []
         for line in DBHpb:
             oligo_start, oligo_end = [int(x) for x in line.strip().split("\t")[2:4]]
 
-            if oligo_start >= self.current_window["start"]:
-                parsing_output = self.__parse_line(line, DBHpb, args, kwargs)
-                if parsing_output is None:
-                    break
-                else:
-                    exec_results.append(parsing_output)
+            parsing_output, parsing_status = self.__parse_line(
+                line, oligo_start, oligo_end, DBHpb, args, kwargs
+            )
+
+            if parsing_status == "break":
+                break
+            if parsing_status == "append":
+                exec_results.append(parsing_output)
             self.r += 1
 
+        if 0 != len(self.current_oligos):
+            exec_results.append(
+                self.__process_window_async(
+                    self.current_oligos,
+                    self.current_window,
+                    self.fprocess,
+                    self.fpost,
+                    *args,
+                    opath=self.window_path,
+                    loggerName=self.logger.name,
+                    **kwargs,
+                )
+            )
         return exec_results
 
     def __end_walk(self, exec_results):
-        if 1 < self.threads:
-            for promise in exec_results:
-                s, w, results = promise.get()
-                if 0 == len(results):
-                    continue
-                if s in self.walk_results.keys():
-                    self.walk_results[s][w] = results
-                else:
-                    self.walk_results[s] = {w: results}
+        for promise in exec_results:
+            s, w, results = promise.get()
+            if s in self.walk_results.keys():
+                self.__walk_results[s][w] = results
+            else:
+                self.__walk_results[s] = {w: results}
 
     def __start_walk(self, *args, **kwargs):
         self.pool = mp.Pool(np.min([self.threads, mp.cpu_count()]))
-        logging.info(f"Prepared a pool of {self.threads} threads.")
+        self.logger.info(f"Prepared a pool of {self.threads} threads.")
 
         self._preprocess_window()
         self._load_windows_until_next_to_do()
 
         if self.reached_last_window and self._window_done():
-            logging.info("All windows pre-processed. Skipped database walk.")
+            self.logger.info("All windows pre-processed. Skipped database walk.")
             return
 
         self.r = 0  # Record ID
         self.rw = 0  # Walk step counter
 
         DBHpb = tqdm(self.__db.buffer(self.C), desc="Parsing records", leave=None)
-        parsing_output = self.__parse_database(self, DBHpb, args, kwargs)
-        logging.info(f"Parsed {self.rw}/{self.r} records.")
+        parsing_output = self.__parse_database(DBHpb, args, kwargs)
+        self.logger.info(f"Parsed {self.rw}/{self.r} records.")
 
         self.__end_walk(parsing_output)
         DBHpb.close()
         self.pool.close()
+        self.pool.join()
 
     def _window_done(self):
         s = int(self.current_window["s"])
@@ -483,11 +504,11 @@ class Walker(GenomicWindowSet):
         if os.path.isfile(win_file_path) and win_done:
             win = pd.read_csv(win_file_path, sep="\t", header=None, index_col=0)
 
-            if (win.transpose().values == self.current_window.values).all():
-                logging.info(
-                    "".join(
+            if (win.transpose().values[0][1:] == self.current_window.values).all():
+                self.logger.info(
+                    " ".join(
                         [
-                            "Re-using previous results for window ",
+                            "Re-using previous results for window",
                             f"{self.window_tag} {self.window_range}",
                         ]
                     )
@@ -495,9 +516,9 @@ class Walker(GenomicWindowSet):
 
                 sid = int(self.current_window["s"])
                 if sid not in self.walk_results.keys():
-                    self.walk_results[sid] = {}
+                    self.__walk_results[sid] = {}
                 wid = int(self.current_window["w"])
-                self.walk_results[sid][wid] = self.fimport(self.window_path)
+                self.__walk_results[sid][wid] = self.fimport(self.window_path)
                 return
             else:
                 shutil.rmtree(self.window_path)
@@ -530,7 +551,7 @@ class Walker(GenomicWindowSet):
             self.config.write(CPH)
 
     @staticmethod
-    def __process_window_asynch(
+    def process_window_async(
         oligos,
         window,
         fprocess,
@@ -546,10 +567,10 @@ class Walker(GenomicWindowSet):
 
         logger_name = f"ifpd2-window-{window_tag}"
         logger = logging.getLogger(logger_name)
+        logger.propagate = False
         logger.setLevel(logging.DEBUG)
-        logPath = "{0}/{1}.log".format(opath, "window")
-        add_log_file_handler(logPath, logger_name)
-        logger.log.info(f"This log is saved at '{logPath}'.")
+        logger.handlers = []
+        add_log_file_handler("{0}/{1}.log".format(opath, "window"), logger.name)
 
         mainLogger = logging.getLogger(loggerName)
         mainLogger.info(f"Window {window_tag} sent to pool.")
@@ -561,15 +582,15 @@ class Walker(GenomicWindowSet):
             *args,
             N=N,
             opath=opath,
-            loggerName=f"ifpd2-window-{window_tag}",
+            loggerName=logger.name,
             **kwargs,
         )
         mainLogger.info(f"Processor pool returned window {window_tag}.")
         return results
 
-    def process_window_asynch(self, *args, **kwargs):
+    def __process_window_async(self, *args, **kwargs):
         if self.pool is not None:
-            self.pool.apply_async(Walker.__process_window_asynch, args, kwargs)
+            return self.pool.apply_async(Walker.process_window_async, args, kwargs)
 
     @staticmethod
     def process_window(
@@ -614,7 +635,7 @@ class Walker(GenomicWindowSet):
             results = []
 
         status, results = fpost(results, opath, *args, **kwargs)
-        if status and not isinstance(opath, type(None)):
+        if status and opath is not None:
             Path(os.path.join(opath, ".done")).touch()
 
         return (int(window["s"]), int(window["w"]), results)

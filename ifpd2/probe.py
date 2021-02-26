@@ -376,11 +376,12 @@ class OligoProbeBuilder(OligoPathBuilder):
         else:
             oGroup.set_focus_window(window["cfr_start"], window["cfr_end"])
             oGroup.expand_focus_to_n_oligos(self.N)
+        return oGroup
 
     def __build_probe_candidates(self, oGroup, window, cfr_step, logger):
         # Applies oligo filters to the oligo group,
         # expands the focus group if needed, and build probe candidates
-        self.__focus_oligos(window, oGroup)
+        oGroup = self.__focus_oligos(window, oGroup)
         probe_list = self.__explore_filter(oGroup, logger)
         if not np.isnan(window["cfr_start"]):
             while 0 == len(probe_list):
@@ -425,6 +426,8 @@ class OligoProbeBuilder(OligoPathBuilder):
                 logger.warning("All oligos included. Score relaxation ineffective.")
                 break
             noligos = nOligosUsable
+
+        return probe_list
 
     def __explore_filter(self, oGroup, logger):
         # Explores the 0-to-max_score score threshold range and stops as soon as
@@ -497,7 +500,7 @@ class OligoProbeBuilder(OligoPathBuilder):
                 )
             )
         if pathMaxLen < self.N:
-            logger.warning("Longest path is shorter than requested. " + "Skipped.")
+            logger.warning("Longest path is shorter than requested. Skipped.")
             return []
 
         paths, comment = self.filter_paths(paths, oData)
