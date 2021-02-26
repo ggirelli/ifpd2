@@ -423,13 +423,6 @@ class Walker(GenomicWindowSet):
                 return (parsing_output, parsing_status)
         return (None, "continue")
 
-    def __queue_process(self, queue, process):
-        if 1 == self._threads:
-            queue.append(process.get())
-        else:
-            queue.append(process)
-        return queue
-
     def __parse_database(self, DBHpb, args, kwargs):
         exec_results = []
         for line in DBHpb:
@@ -438,15 +431,15 @@ class Walker(GenomicWindowSet):
             parsing_output, parsing_status = self.__parse_line(
                 line, oligo_start, oligo_end, DBHpb, args, kwargs
             )
+
             if parsing_status == "break":
                 break
-            if parsing_output == "append":
-                exec_results = self.__queue_process(exec_results, parsing_output)
+            if parsing_status == "append":
+                exec_results.append(parsing_output)
             self.r += 1
 
         if 0 != len(self.current_oligos):
-            exec_results = self.__queue_process(
-                exec_results,
+            exec_results.append(
                 self.__process_window_async(
                     self.current_oligos,
                     self.current_window,
@@ -456,20 +449,17 @@ class Walker(GenomicWindowSet):
                     opath=self.window_path,
                     loggerName=self.logger.name,
                     **kwargs,
-                ),
+                )
             )
         return exec_results
 
     def __end_walk(self, exec_results):
-        if 1 < self.threads:
-            for promise in exec_results:
-                s, w, results = promise.get()
-                if 0 == len(results):
-                    continue
-                if s in self.walk_results.keys():
-                    self.__walk_results[s][w] = results
-                else:
-                    self.__walk_results[s] = {w: results}
+        for promise in exec_results:
+            s, w, results = promise.get()
+            if s in self.walk_results.keys():
+                self.__walk_results[s][w] = results
+            else:
+                self.__walk_results[s] = {w: results}
 
     def __start_walk(self, *args, **kwargs):
         self.pool = mp.Pool(np.min([self.threads, mp.cpu_count()]))
@@ -645,7 +635,7 @@ class Walker(GenomicWindowSet):
             results = []
 
         status, results = fpost(results, opath, *args, **kwargs)
-        if status and not isinstance(opath, type(None)):
+        if status and opath is not None:
             Path(os.path.join(opath, ".done")).touch()
 
         return (int(window["s"]), int(window["w"]), results)
