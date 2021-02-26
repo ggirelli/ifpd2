@@ -3,4 +3,4 @@
 @contact: gigi.ga90@gmail.com
 """
 
-__version__ = "2.0.5"
+__version__ = "1.0.0-alpha"
