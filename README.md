@@ -1,6 +1,6 @@
 # iFISH Probe Design (II)
 
-![](https://img.shields.io/github/license/ggirelli/ifpd2.svg?style=flat)   ![](https://github.com/ggirelli/ifpd2/workflows/Python%20package/badge.svg?branch=main&event=push)
+![](https://img.shields.io/github/license/ggirelli/ifpd2.svg?style=flat)   ![](https://github.com/ggirelli/ifpd2/workflows/Python%20package/badge.svg?branch=main&event=push)  
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/ifpd2) ![PyPI - Format](https://img.shields.io/pypi/format/ifpd2) ![PyPI - Status](https://img.shields.io/pypi/status/ifpd2)  
 ![](https://img.shields.io/github/release/ggirelli/ifpd2.svg?style=flat) ![](https://img.shields.io/github/release-date/ggirelli/ifpd2.svg?style=flat) ![](https://img.shields.io/github/languages/code-size/ggirelli/ifpd2.svg?style=flat)  
 ![](https://img.shields.io/github/watchers/ggirelli/ifpd2.svg?label=Watch&style=social) ![](https://img.shields.io/github/stars/ggirelli/ifpd2.svg?style=social)
