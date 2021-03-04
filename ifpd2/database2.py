@@ -76,11 +76,13 @@ class DataBase(object):
         with open(db_pickle_path, "rb") as IH:
             self._details = pickle.load(IH)
 
-        for chromosome in self._details["chromosomes"].keys():
+        for chromosome, details in self._details["chromosomes"].items():
             chromosome_path = os.path.join(path, f"{chromosome.decode()}.bin")
             assert os.path.isfile(
                 chromosome_path
             ), f"missing expected chromosome file: '{chromosome_path}'"
+            assert "size" in details, f"missing size information for '{chromosome}'"
+            assert "recordno" in details, f"missing size information for '{chromosome}'"
 
         self._record_byte_size = get_dtype_length(self._details["dtype"])
         assert self._record_byte_size > 0
@@ -92,8 +94,22 @@ class DataBase(object):
         return list(self._details["chromosomes"])
 
     @property
-    def chromosome_sizes(self):
-        return copy.copy(self._details["chromosomes"])
+    def chromosome_sizes(self) -> Dict[bytes, int]:
+        return dict(
+            [
+                (name, details["size"])
+                for name, details in self._details["chromosomes"].items()
+            ]
+        )
+
+    @property
+    def chromosome_recordnos(self) -> Dict[bytes, int]:
+        return dict(
+            [
+                (name, details["recordno"])
+                for name, details in self._details["chromosomes"].items()
+            ]
+        )
 
     def log_details(self) -> None:
         logging.info(f"Database name: {self._details['args'].output}")
@@ -106,9 +122,15 @@ class DataBase(object):
         logging.info("")
         logging.info("[bold]## Chromosome details[/bold]")
         logging.info(f"Expecting {len(self._details['chromosomes'])} chromosomes.")
-        logging.info("Chromosome sizes:")
-        for chromosome, size in self._details["chromosomes"].items():
-            logging.info(f"\t{chromosome.decode()} => {size}")
+        logging.info("Chromosomes:")
+        for chromosome, details in self._details["chromosomes"].items():
+            empty_label = "".join([" " for c in chromosome.decode()])
+            logging.info(f"\t{chromosome.decode()} => size : {details['size']}")
+            logging.info(f"\t{empty_label} => recordno : {details['recordno']}")
+        logging.info("")
+        logging.info("[bold]Record details[/bold]")
+        logging.info(f"Record size in bytes: {self._record_byte_size}")
+        logging.info(f"Dtype: {self._details['dtype']}")
 
     def __read_next_record(self, IH: IO) -> bytes:
         return IH.read(self._record_byte_size)
