@@ -30,6 +30,9 @@ def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPars
     )
 
     scripts.db_check.init_parser(sub_subparsers)
+    scripts.db_dump.init_parser(sub_subparsers)
+    scripts.db_info.init_parser(sub_subparsers)
     scripts.db_make.init_parser(sub_subparsers)
+    scripts.db_merge.init_parser(sub_subparsers)
 
     return parser
