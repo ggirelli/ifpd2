@@ -4,6 +4,7 @@
 """
 
 import argparse
+from collections import defaultdict
 import copy
 from ifpd2 import asserts as ass
 from ifpd2.asserts import enable_rich_assert
@@ -15,7 +16,7 @@ import os
 import pandas as pd  # type: ignore
 import pickle
 from rich.progress import Progress, track  # type: ignore
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, DefaultDict, Dict, List, Optional, Set, Tuple
 
 
 def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
@@ -207,16 +208,12 @@ def parse_record_headers(db: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]
     return (db.astype(dtype), dtype)
 
 
-def get_dtype_length(dtype) -> int:
-    return sum([int(label.strip("><|SUuif")) for label in dtype.values()])
-
-
 def write_database(
     dbdf: pd.DataFrame, dtype: Dict[str, str], args: argparse.Namespace
 ) -> None:
-    chromosome_data: Dict[bytes, int] = dict(
-        [(x, 0) for x in set(dbdf["chromosome"].values)]
-    )
+    chromosome_data: DefaultDict[bytes, Dict[str, int]] = defaultdict(lambda: {})
+    for chromosome in set(dbdf["chromosome"].values):
+        chromosome_data[chromosome]
 
     with Progress() as progress:
         chromosome_track = progress.add_task(
