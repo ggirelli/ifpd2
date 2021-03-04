@@ -287,4 +287,5 @@ def run(args: argparse.Namespace) -> None:
     opsb.build(ow.walk_results)
     opsb.export()
 
+    logging.info("Done. :thumbs_up: :smiley:")
     logging.shutdown()
