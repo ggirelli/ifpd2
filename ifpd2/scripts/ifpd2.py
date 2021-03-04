@@ -35,7 +35,7 @@ Another iFISH probe design pipeline (II).
         help="Access the help page for a sub-command with: sub-command -h",
     )
 
-    scripts.dbchk.init_parser(subparsers)
+    scripts.db.init_parser(subparsers)
     scripts.query.init_parser(subparsers)
 
     args = parser.parse_args()

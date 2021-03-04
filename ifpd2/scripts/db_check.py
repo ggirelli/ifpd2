@@ -11,7 +11,7 @@ import os
 
 def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
     parser = subparsers.add_parser(
-        __name__.split(".")[-1],
+        "check",
         description="""
 Lorem ipsum dolor sit amet, consectetur adipisicing elit. Soluta, aspernatur,
 natus. Possimus recusandae distinctio, voluptatem fuga delectus laudantium ut,

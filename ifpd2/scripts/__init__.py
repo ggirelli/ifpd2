@@ -4,7 +4,7 @@
 """
 
 from ifpd2.scripts import arguments, ifpd2
-from ifpd2.scripts import dbchk
+from ifpd2.scripts import db, db_check, db_make
 from ifpd2.scripts import query
 
 import logging
@@ -16,4 +16,4 @@ logging.basicConfig(
     handlers=[RichHandler(markup=True, rich_tracebacks=True)],
 )
 
-__all__ = ["arguments", "ifpd2", "dbchk", "query"]
+__all__ = ["arguments", "ifpd2", "db", "db_check", "db_make", "query"]
