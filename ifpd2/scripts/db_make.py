@@ -14,8 +14,7 @@ import numpy as np  # type: ignore
 import os
 import pandas as pd  # type: ignore
 import pickle
-from rich.progress import Progress  # type: ignore
-from tqdm import tqdm  # type: ignore
+from rich.progress import Progress, track  # type: ignore
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
 
@@ -157,8 +156,8 @@ def add_sequence_details(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]
     sequence_length_list: List[int] = []
     gc_content_list: List[float] = []
 
-    for sequence in tqdm(
-        df["sequence"].values, desc="calculating GC-content", leave=False
+    for sequence in track(
+        df["sequence"].values, description="calculating GC-content", transient=True
     ):
         sequence = sequence.upper()
         sequence_length_list.append(len(sequence))
@@ -183,7 +182,7 @@ def parse_record_headers(db: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]
     start_list: List[int] = []
     end_list: List[int] = []
 
-    for header in tqdm(db.index, desc="parsing record headers", leave=False):
+    for header in track(db.index, description="parsing record headers", transient=True):
         name, position = header.split(" ")
         name_list.append(name)
         name_length_set.add(len(name))
@@ -208,6 +207,10 @@ def parse_record_headers(db: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]
     return (db.astype(dtype), dtype)
 
 
+def get_dtype_length(dtype) -> int:
+    return sum([int(label.strip("><|SUuif")) for label in dtype.values()])
+
+
 def write_database(
     dbdf: pd.DataFrame, dtype: Dict[str, str], args: argparse.Namespace
 ) -> None:
@@ -217,7 +220,7 @@ def write_database(
 
     with Progress() as progress:
         chromosome_track = progress.add_task(
-            "exporting chromosome", total=len(chromosome_data)
+            "exporting chromosome", total=len(chromosome_data), transient=True
         )
         for selected_chromosome in chromosome_data.keys():
             chromosome_db = dbdf.loc[selected_chromosome == dbdf["chromosome"], :]
@@ -228,20 +231,20 @@ def write_database(
                 writing_track = progress.add_task(
                     f"writing {selected_chromosome.decode()}.bin",
                     total=chromosome_db.shape[0],
+                    transient=True,
                 )
                 for record in chromosome_db.to_records(
                     index=False, column_dtypes=dtype
                 ):
                     IH.write(record.tobytes())
-                    progress.update(writing_track, advance=1/chromosome_db.shape[0])
-            progress.update(chromosome_track, advance=1/len(chromosome_data))
+                    progress.update(writing_track, advance=1)
+            progress.update(chromosome_track, advance=1)
 
+    logging.info("writing db.pickle")
     with open(os.path.join(args.output, "db.pickle"), "wb") as OH:
+        args.parse = None
+        args.run = None
         pickle.dump(dict(chromosomes=chromosome_data, dtype=dtype, args=args), OH)
-
-
-def get_dtype_length(dtype) -> int:
-    return sum([int(label.strip("><|SUuif")) for label in dtype.values()])
 
 
 @enable_rich_assert
@@ -273,3 +276,5 @@ def run(args: argparse.Namespace) -> None:
     dbdf = dbdf.loc[:, const.database_columns]
 
     write_database(dbdf, dtype, args)
+
+    logging.info("Done. :thumbs_up: :smiley:")
