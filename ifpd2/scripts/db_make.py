@@ -4,7 +4,6 @@
 """
 
 import argparse
-from collections import defaultdict
 import copy
 from ifpd2 import asserts as ass
 from ifpd2.asserts import enable_rich_assert
@@ -16,7 +15,7 @@ import os
 import pandas as pd  # type: ignore
 import pickle
 from rich.progress import Progress, track  # type: ignore
-from typing import Callable, DefaultDict, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 
 def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
@@ -72,6 +71,16 @@ OligoArrayAux name (3rd field of 1st column).
         help="Path to OligoArrayAux output. Format details above.",
     )
 
+    advanced = parser.add_argument_group("advanced arguments")
+    advanced.add_argument(
+        "-p",
+        "--prefix",
+        metavar="chromPrefix",
+        default="",
+        type=str,
+        help="Prefix to be added to chromosome labels. Default: ''.",
+    )
+
     parser = ap.add_version_option(parser)
     parser.set_defaults(parse=parse_arguments, run=run)
 
@@ -80,6 +89,7 @@ OligoArrayAux name (3rd field of 1st column).
 
 def init_log(args: argparse.Namespace) -> None:
     logging.info(f"output folder: '{args.output}'")
+    logging.info(f"chromosome prefix: '{args.prefix}'")
     if args.hush is not None:
         logging.info(f"hush: {args.hush}")
     if args.melting is not None:
@@ -174,7 +184,9 @@ def add_sequence_details(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]
     return (df.astype(dtype), dtype)
 
 
-def parse_record_headers(db: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
+def parse_record_headers(
+    db: pd.DataFrame, chromosome_prefix: str = ""
+) -> Tuple[pd.DataFrame, Dict[str, str]]:
     logging.info("adding header feature columns: name, chromosome, start, end")
     name_list: List[str] = []
     name_length_set: Set[int] = set()
@@ -188,8 +200,8 @@ def parse_record_headers(db: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]
         name_list.append(name)
         name_length_set.add(len(name))
         chromosome, extremes = position.split("=")[1].split(":")
-        chromosome_list.append(chromosome)
-        chromosome_length_set.add(len(chromosome))
+        chromosome_list.append(f"{chromosome_prefix}{chromosome}")
+        chromosome_length_set.add(len(f"{chromosome_prefix}{chromosome}"))
         start, end = [int(x) for x in extremes.split("-")]
         start_list.append(start)
         end_list.append(end)
@@ -211,22 +223,23 @@ def parse_record_headers(db: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]
 def write_database(
     dbdf: pd.DataFrame, dtype: Dict[str, str], args: argparse.Namespace
 ) -> None:
-    chromosome_data: DefaultDict[bytes, Dict[str, int]] = defaultdict(lambda: {})
+    chromosome_data: Dict[bytes, Dict[str, int]] = {}
     for chromosome in set(dbdf["chromosome"].values):
-        chromosome_data[chromosome]
+        chromosome_data[chromosome] = {}
 
     with Progress() as progress:
         chromosome_track = progress.add_task(
             "exporting chromosome", total=len(chromosome_data), transient=True
         )
-        for selected_chromosome in chromosome_data.keys():
-            chromosome_db = dbdf.loc[selected_chromosome == dbdf["chromosome"], :]
-            chromosome_data[selected_chromosome] = chromosome_db["end"].values.max()
+        for selected_chrom in chromosome_data.keys():
+            chromosome_db = dbdf.loc[selected_chrom == dbdf["chromosome"], :]
+            chromosome_data[selected_chrom]["size"] = chromosome_db["end"].values.max()
+            chromosome_data[selected_chrom]["recordno"] = chromosome_db.shape[0]
             with open(
-                os.path.join(args.output, f"{selected_chromosome.decode()}.bin"), "wb"
+                os.path.join(args.output, f"{selected_chrom.decode()}.bin"), "wb"
             ) as IH:
                 writing_track = progress.add_task(
-                    f"writing {selected_chromosome.decode()}.bin",
+                    f"writing {selected_chrom.decode()}.bin",
                     total=chromosome_db.shape[0],
                     transient=True,
                 )
@@ -258,7 +271,7 @@ def run(args: argparse.Namespace) -> None:
 
     dbdf = reduce_sequence_columns(dbdf)
     dbdf, dtype_sequence = add_sequence_details(dbdf)
-    dbdf, dtype_header = parse_record_headers(dbdf)
+    dbdf, dtype_header = parse_record_headers(dbdf, args.prefix)
 
     dtype = dict()
     dtype.update(const.dtype_melting)
