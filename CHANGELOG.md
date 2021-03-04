@@ -8,10 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 ### Added
-- `db make` entry point.
-- `db dump` entry point.
-- `db info` entry point
-- `db merge` entry point.
+- New entry points: `db make`, `db dump`, `db info`, and `db merge`.
 - Module `io` with parsing functions for output generated via oligo-melting, hush, or OligoArrayAux.
 - Assert for compatibility with a given dtype. (only max value currently checked)
 
