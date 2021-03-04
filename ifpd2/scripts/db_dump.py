@@ -40,6 +40,8 @@ def run(args: argparse.Namespace) -> None:
     print("\t".join(const.database_columns))
     for chromosome in DB.chromosome_list:
         for record in tqdm(
-            DB.walk_chromosome(chromosome), total=DB.chromosome_recordnos[chromosome]
+            DB.walk_chromosome(chromosome),
+            desc=f"dumping '{chromosome.decode()}'",
+            total=DB.chromosome_recordnos[chromosome],
         ):
             print(record.to_csv("\t"))
