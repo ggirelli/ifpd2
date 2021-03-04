@@ -5,6 +5,7 @@
 
 import argparse
 from ifpd2.asserts import enable_rich_assert
+from ifpd2 import const
 from ifpd2.database2 import DataBase
 from ifpd2.scripts import arguments as ap
 from tqdm import tqdm  # type: ignore
@@ -36,6 +37,9 @@ def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
 @enable_rich_assert
 def run(args: argparse.Namespace) -> None:
     DB = DataBase(args.input)
+    print("\t".join(const.database_columns))
     for chromosome in DB.chromosome_list:
-        for record in tqdm(DB.walk_chromosome(chromosome)):
+        for record in tqdm(
+            DB.walk_chromosome(chromosome), total=DB.chromosome_recordnos[chromosome]
+        ):
             print(record.to_csv("\t"))
