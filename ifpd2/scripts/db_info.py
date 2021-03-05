@@ -7,8 +7,8 @@ import argparse
 from ifpd2.asserts import enable_rich_assert
 from ifpd2.database2 import DataBase
 from ifpd2.scripts import arguments as ap
-import os
 import logging
+import os
 
 
 def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
