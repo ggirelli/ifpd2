@@ -10,7 +10,7 @@ import numpy as np  # type: ignore
 import os
 import pickle
 import pandas as pd  # type: ignore
-from rich.progress import track  # type: ignore
+from tqdm import tqdm  # type: ignore
 from typing import Any, Dict, IO, Iterator, List, Set, Tuple
 
 
@@ -22,26 +22,20 @@ class ChromosomeIndex(object):
     """ChromosomeIndex"""
 
     _bin_size: int
-    _record_byte_size: int
     _index: Dict[int, Tuple[int, int]]
 
-    def __init__(self, bin_size: int, dtype: Dict[str, str]):
+    def __init__(self, bin_size: int):
         super(ChromosomeIndex, self).__init__()
         assert bin_size >= 1
         self._bin_size = bin_size
-        self._record_byte_size = get_dtype_length(dtype)
-        assert self._record_byte_size > 0
-
-    @property
-    def record_byte_size(self):
-        return self._record_byte_size
 
     def __init_index(self, chrom_db: pd.DataFrame) -> None:
+        self._index = {}
         chrom_size_nt = chrom_db["end"].values.max()
         for bin_id in range(0, chrom_size_nt, self._bin_size):
             self._index[bin_id] = (0, 0)
 
-    def build(self, chrom_db: pd.DataFrame) -> None:
+    def build(self, chrom_db: pd.DataFrame, record_byte_size: int) -> None:
         for colname in ("chromosome", "start", "end"):
             assert colname in chrom_db.columns, f"missing '{colname}' column"
 
@@ -52,16 +46,16 @@ class ChromosomeIndex(object):
         chromosome = list(chromosome_set)[0].decode()
 
         current_position = -1
-        for i in track(
+        for i in tqdm(
             range(chrom_db.shape[0]),
-            description=f"building '{chromosome}' index",
-            transient=True,
+            desc=f"building '{chromosome}' index",
+            leave=False,
         ):
             position_in_nt = chrom_db["start"].values[i]
             assert position_in_nt > current_position
             current_position = position_in_nt
 
-            position_in_bytes = self._record_byte_size * i
+            position_in_bytes = record_byte_size * i
             binned_to = position_in_nt // self._bin_size
 
             bin_start, bin_end = list(self._index[binned_to])
@@ -72,6 +66,7 @@ class ChromosomeIndex(object):
             self._index[binned_to] = (bin_start, bin_end)
 
     def __getitem__(self, position_in_nt: int) -> int:
+        assert self._index is not None
         binned_to = position_in_nt // self._bin_size
         return self._index[binned_to][0]
 
@@ -80,8 +75,8 @@ class ChromosomeData(object):
     """ChromosomeData"""
 
     __allowed_fields = ("recordno", "size_nt", "size_bytes")
-    _data: Dict[bytes, Dict[str, Any]]
-    _index: ChromosomeIndex
+    _data: Dict[bytes, Tuple[Dict[str, Any], ChromosomeIndex]]
+    _record_byte_size: int
 
     def __init__(
         self,
@@ -90,30 +85,54 @@ class ChromosomeData(object):
         index_bin_size: int = 100000,
     ):
         super(ChromosomeData, self).__init__()
+
+        self._record_byte_size = get_dtype_length(dtype)
+        assert self._record_byte_size > 0
+
         self._data = {}
         for chromosome in set(chromosome_set):
-            self._data[chromosome] = {}
-        self._index = ChromosomeIndex(index_bin_size, dtype)
+            self._data[chromosome] = ({}, ChromosomeIndex(index_bin_size))
 
     @property
-    def index(self):
-        return self._index
+    def record_byte_size(self) -> int:
+        return self._record_byte_size
 
     def __len__(self) -> int:
         return len(self._data)
 
-    def __getitem__(self, key: bytes) -> Dict[str, int]:
-        return copy.copy(self._data[key])
-
     def keys(self) -> List[bytes]:
         return list(self._data.keys())
+
+    @property
+    def sizes_nt(self) -> Dict[bytes, int]:
+        return dict(
+            [(name, details[0]["size_nt"]) for name, details in self._data.items()]
+        )
+
+    @property
+    def sizes_bytes(self) -> Dict[bytes, int]:
+        return dict(
+            [(name, details[0]["size_bytes"]) for name, details in self._data.items()]
+        )
+
+    @property
+    def recordnos(self) -> Dict[bytes, int]:
+        return dict(
+            [(name, details[0]["recordno"]) for name, details in self._data.items()]
+        )
 
     def set(self, chromosome: bytes, key: str, value: int) -> None:
         if chromosome not in self._data:
             raise KeyError(f"key '{chromosome.decode()}' not found")
         if key not in self.__allowed_fields:
             raise KeyError(f"key '{key}' not found")
-        self._data[chromosome][key] = value
+        self._data[chromosome][0][key] = value
+
+    def get_details(self, chromosome: bytes) -> Dict[str, int]:
+        return copy.copy(self._data[chromosome][0])
+
+    def get_index(self, chromosome: bytes) -> ChromosomeIndex:
+        return copy.copy(self._data[chromosome][1])
 
     def populate(self, chrom_db: pd.DataFrame) -> None:
         assert "chromosome" in chrom_db.columns
@@ -123,9 +142,9 @@ class ChromosomeData(object):
         self.set(
             selected_chrom,
             "size_bytes",
-            chrom_db.shape[0] * self._index.record_byte_size,
+            chrom_db.shape[0] * self._record_byte_size,
         )
-        self._index.build(chrom_db)
+        self._data[selected_chrom][1].build(chrom_db, self._record_byte_size)
 
 
 class Record(object):
@@ -207,25 +226,19 @@ class DataBase(object):
 
     @property
     def chromosome_list(self) -> List[bytes]:
-        return list(self._details["chromosomes"])
+        return self._details["chromosomes"].keys()
 
     @property
-    def chromosome_sizes(self) -> Dict[bytes, int]:
-        return dict(
-            [
-                (name, details["size"])
-                for name, details in self._details["chromosomes"].items()
-            ]
-        )
+    def chromosome_sizes_nt(self) -> Dict[bytes, int]:
+        return self._details["chromosomes"].sizes_nt()
+
+    @property
+    def chromosome_sizes_bytes(self) -> Dict[bytes, int]:
+        return self._details["chromosomes"].sizes_bytes()
 
     @property
     def chromosome_recordnos(self) -> Dict[bytes, int]:
-        return dict(
-            [
-                (name, details["recordno"])
-                for name, details in self._details["chromosomes"].items()
-            ]
-        )
+        return self._details["chromosomes"].recordnos()
 
     def log_details(self) -> None:
         logging.info(f"Database name: {self._details['args'].output}")
