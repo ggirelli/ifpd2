@@ -228,21 +228,6 @@ def parse_record_headers(
     return (db.astype(dtype), dtype)
 
 
-def populate_chromosome_data(
-    chrom_data: db2.ChromosomeData, chrom_db: pd.DataFrame, dtype: Dict[str, str]
-) -> db2.ChromosomeData:
-    assert "chromosome" in chrom_db.columns
-    selected_chrom = chrom_db["chromosome"][0]
-    chrom_data.set(selected_chrom, "recordno", chrom_db.shape[0])
-    chrom_data.set(selected_chrom, "size_nt", chrom_db["end"].values.max())
-    chrom_data.set(
-        selected_chrom,
-        "size_bytes",
-        chrom_db.shape[0] * db2.get_dtype_length(dtype),
-    )
-    return chrom_data
-
-
 def write_database(
     dbdf: pd.DataFrame, dtype: Dict[str, str], args: argparse.Namespace
 ) -> None:
