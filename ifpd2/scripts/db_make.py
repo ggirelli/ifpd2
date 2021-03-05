@@ -7,7 +7,7 @@ import argparse
 import copy
 from ifpd2 import asserts as ass
 from ifpd2.asserts import enable_rich_assert
-from ifpd2 import const, io
+from ifpd2 import const, database2 as db2, io
 from ifpd2.scripts import arguments as ap
 import logging
 import numpy as np  # type: ignore
@@ -79,6 +79,14 @@ OligoArrayAux name (3rd field of 1st column).
         default="",
         type=str,
         help="Prefix to be added to chromosome labels. Default: ''.",
+    )
+    advanced.add_argument(
+        "-b",
+        "--binsize",
+        metavar="indexBin",
+        default=1000000,
+        type=int,
+        help="Binning for the index.",
     )
 
     parser = ap.add_version_option(parser)
@@ -220,27 +228,40 @@ def parse_record_headers(
     return (db.astype(dtype), dtype)
 
 
+def populate_chromosome_data(
+    chrom_data: db2.ChromosomeData, chrom_db: pd.DataFrame, dtype: Dict[str, str]
+) -> db2.ChromosomeData:
+    assert "chromosome" in chrom_db.columns
+    selected_chrom = chrom_db["chromosome"][0]
+    chrom_data.set(selected_chrom, "recordno", chrom_db.shape[0])
+    chrom_data.set(selected_chrom, "size_nt", chrom_db["end"].values.max())
+    chrom_data.set(
+        selected_chrom,
+        "size_bytes",
+        chrom_db.shape[0] * db2.get_dtype_length(dtype),
+    )
+    return chrom_data
+
+
 def write_database(
     dbdf: pd.DataFrame, dtype: Dict[str, str], args: argparse.Namespace
 ) -> None:
-    chromosome_data: Dict[bytes, Dict[str, int]] = {}
-    for chromosome in set(dbdf["chromosome"].values):
-        chromosome_data[chromosome] = {}
+    chrom_data = db2.ChromosomeData(set(dbdf["chromosome"].values), dtype, args.binsize)
 
     with Progress() as progress:
         chromosome_track = progress.add_task(
-            "exporting chromosome", total=len(chromosome_data), transient=True
+            "exporting chromosome", total=len(chrom_data), transient=True
         )
-        for selected_chrom in chromosome_data.keys():
+        for selected_chrom in chrom_data.keys():
             chromosome_db = dbdf.loc[selected_chrom == dbdf["chromosome"], :]
 
-            logging.info(f"sorting records for {chromosome.decode()}")
+            logging.info(f"sorting records for {selected_chrom.decode()}")
             chromosome_db.sort_values(
-                by="start", axis=1, kind="mergesort", inplace=True
+                by="start", axis=0, kind="mergesort", inplace=True
             )
 
-            chromosome_data[selected_chrom]["size"] = chromosome_db["end"].values.max()
-            chromosome_data[selected_chrom]["recordno"] = chromosome_db.shape[0]
+            chrom_data.populate(chromosome_db)
+
             with open(
                 os.path.join(args.output, f"{selected_chrom.decode()}.bin"), "wb"
             ) as IH:
@@ -260,7 +281,7 @@ def write_database(
     with open(os.path.join(args.output, "db.pickle"), "wb") as OH:
         args.parse = None
         args.run = None
-        pickle.dump(dict(chromosomes=chromosome_data, dtype=dtype, args=args), OH)
+        pickle.dump(dict(chromosomes=chrom_data, dtype=dtype, args=args), OH)
 
 
 @enable_rich_assert

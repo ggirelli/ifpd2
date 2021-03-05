@@ -9,17 +9,132 @@ import logging
 import numpy as np  # type: ignore
 import os
 import pickle
-from typing import Any, Dict, IO, List, Iterator
+import pandas as pd  # type: ignore
+from rich.progress import track  # type: ignore
+from typing import Any, Dict, IO, Iterator, List, Set, Tuple
 
 
 def get_dtype_length(dtype) -> int:
     return sum([int(label.strip("><|SUuif")) for label in dtype.values()])
 
 
+class ChromosomeIndex(object):
+    """ChromosomeIndex"""
+
+    _bin_size: int
+    _record_byte_size: int
+    _index: Dict[int, Tuple[int, int]]
+
+    def __init__(self, bin_size: int, dtype: Dict[str, str]):
+        super(ChromosomeIndex, self).__init__()
+        assert bin_size >= 1
+        self._bin_size = bin_size
+        self._record_byte_size = get_dtype_length(dtype)
+        assert self._record_byte_size > 0
+
+    @property
+    def record_byte_size(self):
+        return self._record_byte_size
+
+    def __init_index(self, chrom_db: pd.DataFrame) -> None:
+        chrom_size_nt = chrom_db["end"].values.max()
+        for bin_id in range(0, chrom_size_nt, self._bin_size):
+            self._index[bin_id] = (0, 0)
+
+    def build(self, chrom_db: pd.DataFrame) -> None:
+        for colname in ("chromosome", "start", "end"):
+            assert colname in chrom_db.columns, f"missing '{colname}' column"
+
+        self.__init_index(chrom_db)
+
+        chromosome_set: Set[bytes] = set(chrom_db["chromosome"].values)
+        assert 1 == len(chromosome_set)
+        chromosome = list(chromosome_set)[0].decode()
+
+        current_position = -1
+        for i in track(
+            range(chrom_db.shape[0]),
+            description=f"building '{chromosome}' index",
+            transient=True,
+        ):
+            position_in_nt = chrom_db["start"].values[i]
+            assert position_in_nt > current_position
+            current_position = position_in_nt
+
+            position_in_bytes = self._record_byte_size * i
+            binned_to = position_in_nt // self._bin_size
+
+            bin_start, bin_end = list(self._index[binned_to])
+            if bin_start > position_in_bytes:
+                bin_start = position_in_bytes
+            if bin_end < position_in_bytes:
+                bin_end = position_in_bytes
+            self._index[binned_to] = (bin_start, bin_end)
+
+    def __getitem__(self, position_in_nt: int) -> int:
+        binned_to = position_in_nt // self._bin_size
+        return self._index[binned_to][0]
+
+
+class ChromosomeData(object):
+    """ChromosomeData"""
+
+    __allowed_fields = ("recordno", "size_nt", "size_bytes")
+    _data: Dict[bytes, Dict[str, Any]]
+    _index: ChromosomeIndex
+
+    def __init__(
+        self,
+        chromosome_set: Set[bytes],
+        dtype: Dict[str, str],
+        index_bin_size: int = 100000,
+    ):
+        super(ChromosomeData, self).__init__()
+        for chromosome in set(chromosome_set):
+            self._data[chromosome] = {}
+        self._index = ChromosomeIndex(index_bin_size, dtype)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __getitem__(self, key: bytes) -> Dict[str, int]:
+        return copy.copy(self._data[key])
+
+    def keys(self) -> List[bytes]:
+        return list(self._data.keys())
+
+    def set(self, chromosome: bytes, key: str, value: int) -> None:
+        if chromosome not in self._data:
+            raise KeyError(f"key '{chromosome.decode()}' not found")
+        if key not in self.__allowed_fields:
+            raise KeyError(f"key '{key}' not found")
+        self._data[chromosome][key] = value
+
+    def populate(self, chrom_db: pd.DataFrame) -> None:
+        assert "chromosome" in chrom_db.columns
+        selected_chrom = chrom_db["chromosome"][0]
+        self.set(selected_chrom, "recordno", chrom_db.shape[0])
+        self.set(selected_chrom, "size_nt", chrom_db["end"].values.max())
+        self.set(
+            selected_chrom,
+            "size_bytes",
+            chrom_db.shape[0] * self._index.record_byte_size,
+        )
+        self._index.build(chrom_db)
+
+
 class Record(object):
     """DataBase Record"""
 
     _data: Dict[str, Any]
+
+    def __init__(self, record: bytes, column_dtypes: Dict[str, str]):
+        super(Record, self).__init__()
+        self.__parse_bytes(record, column_dtypes)
+
+    @property
+    def data(self) -> Dict[str, Any]:
+        return copy.copy(self._data)
 
     def __parse_bytes(self, record: bytes, column_dtypes: Dict[str, str]) -> None:
         assert len(record) == get_dtype_length(column_dtypes)
@@ -46,15 +161,11 @@ class Record(object):
                 csv_fields.append(str(data))
         return sep.join(csv_fields)
 
-    def __init__(self, record: bytes, column_dtypes: Dict[str, str]):
-        super(Record, self).__init__()
-        self.__parse_bytes(record, column_dtypes)
-
-    def __get__(self, key) -> Any:
+    def __getitem__(self, key: str) -> Any:
         if key not in const.database_columns:
             raise KeyError(f"unrecognized key '{key}'")
         else:
-            return self._data[key]
+            return self.data[key]
 
     def __repr__(self) -> str:
         return str(self._data)
