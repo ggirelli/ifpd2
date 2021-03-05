@@ -17,7 +17,7 @@ from typing import Dict, List
 
 from ifpd2 import asserts as ass
 from ifpd2.logging import add_log_file_handler
-from ifpd2.database2 import DataBase
+from ifpd2.database import DataBase
 from ifpd2.oligo import OligoGroup
 from ifpd2.probe import OligoProbeBuilder
 

@@ -7,7 +7,7 @@ import argparse
 import copy
 from ifpd2 import asserts as ass
 from ifpd2.asserts import enable_rich_assert
-from ifpd2 import const, database2 as db2, io
+from ifpd2 import const, database as db, io
 from ifpd2.scripts import arguments as ap
 import logging
 import numpy as np  # type: ignore
@@ -231,7 +231,7 @@ def parse_record_headers(
 def write_database(
     dbdf: pd.DataFrame, dtype: Dict[str, str], args: argparse.Namespace
 ) -> None:
-    chrom_data = db2.ChromosomeData(set(dbdf["chromosome"].values), dtype, args.binsize)
+    chrom_data = db.ChromosomeData(set(dbdf["chromosome"].values), dtype, args.binsize)
 
     with Progress() as progress:
         chromosome_track = progress.add_task(
@@ -244,7 +244,7 @@ def write_database(
             chromosome_db.sort_values(
                 by="start", axis=0, kind="mergesort", inplace=True
             )
-
+            logging.info(f"building index for {selected_chrom.decode()}")
             chrom_data.populate(chromosome_db)
 
             with open(

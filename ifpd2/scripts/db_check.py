@@ -5,7 +5,7 @@
 
 import argparse
 from ifpd2.asserts import enable_rich_assert
-from ifpd2.database2 import DataBase
+from ifpd2.database import DataBase
 from ifpd2.scripts import arguments as ap
 import logging
 import os
