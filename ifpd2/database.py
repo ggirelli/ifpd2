@@ -11,6 +11,7 @@ import numpy as np  # type: ignore
 import os
 import pickle
 import pandas as pd  # type: ignore
+from rich.progress import Progress, TaskID  # type: ignore
 from typing import Any, Dict, IO, Iterator, List, Set, Tuple
 
 
@@ -35,7 +36,12 @@ class ChromosomeIndex(object):
         for bin_id in range(0, (chrom_size_nt // self._bin_size) + 1):
             self._index[bin_id] = (np.inf, 0)
 
-    def build(self, chrom_db: pd.DataFrame, record_byte_size: int) -> None:
+    def build(
+        self,
+        chrom_db: pd.DataFrame,
+        record_byte_size: int,
+        track: Tuple[Progress, TaskID],
+    ) -> None:
         for colname in ("chromosome", "start", "end"):
             assert colname in chrom_db.columns, f"missing '{colname}' column"
 
@@ -46,6 +52,7 @@ class ChromosomeIndex(object):
 
         current_position = -1
         for i in range(chrom_db.shape[0]):
+            track[0].update(track[1], advance=1)
             position_in_nt = chrom_db["start"].values[i]
             assert position_in_nt > current_position
             current_position = position_in_nt
@@ -140,7 +147,7 @@ class ChromosomeData(object):
     def chromosome_index(self, chromosome: bytes) -> ChromosomeIndex:
         return copy.copy(self._data[chromosome]["index"])
 
-    def populate(self, chrom_db: pd.DataFrame) -> None:
+    def populate(self, chrom_db: pd.DataFrame, track: Tuple[Progress, TaskID]) -> None:
         assert "chromosome" in chrom_db.columns
         selected_chrom = chrom_db["chromosome"][0]
         self.set(selected_chrom, "recordno", chrom_db.shape[0])
@@ -150,7 +157,9 @@ class ChromosomeData(object):
             "size_bytes",
             chrom_db.shape[0] * self._record_byte_size,
         )
-        self._data[selected_chrom]["index"].build(chrom_db, self._record_byte_size)
+        self._data[selected_chrom]["index"].build(
+            chrom_db, self._record_byte_size, track
+        )
 
     def __check__(self) -> None:
         for chromosome, details in self._data.items():

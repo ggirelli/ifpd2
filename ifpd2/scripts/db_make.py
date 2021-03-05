@@ -245,7 +245,12 @@ def write_database(
                 by="start", axis=0, kind="mergesort", inplace=True
             )
             logging.info(f"building index for {selected_chrom.decode()}")
-            chrom_data.populate(chromosome_db)
+            indexing_track = progress.add_task(
+                f"indexing {selected_chrom.decode()}.bin",
+                total=chromosome_db.shape[0],
+                transient=True,
+            )
+            chrom_data.populate(chromosome_db, (progress, indexing_track))
 
             with open(
                 os.path.join(args.output, f"{selected_chrom.decode()}.bin"), "wb"
