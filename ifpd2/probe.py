@@ -123,11 +123,11 @@ class OligoProbe(object):
                     "".join(
                         [
                             f">{oligo['name']}:",
-                            f"{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n",
+                            f"{oligo['chromosome']}:{oligo['start']}-{oligo['end']}\n",
                         ]
                     )
                 )
-                BH.write(f"{oligo['seq']}\n")
+                BH.write(f"{oligo['sequence']}\n")
 
 
 class OligoPathBuilder(object):
@@ -286,15 +286,14 @@ class OligoPathBuilder(object):
 class OligoProbeBuilder(OligoPathBuilder):
     """Class to build OligoProbe objects."""
 
-    k = None
-    F = (0, 100)  # Threshold on number of off-targets (range)
-    Gs = (0.0, 0.5)  # dG of SS either as kcal/mol (negative)
-    #  or as fraction dG of hybrid (0<=Gs<=1)
-    #  (range)
-    Ot = 0.1  # Step for oligo score relaxation
-
     def __init__(self):
         super(OligoProbeBuilder, self).__init__()
+        self.k = None
+        self.F = [0, 99]  # Threshold on number of off-targets (range)
+        self.Gs = [0.0, 0.5]  # dG of SS either as kcal/mol (negative)
+        #  or as fraction dG of hybrid (0<=Gs<=1)
+        #  (range)
+        self.Ot = 0.1  # Step for oligo score relaxation
 
     @property
     def config(self):
@@ -323,14 +322,14 @@ class OligoProbeBuilder(OligoPathBuilder):
             ass.ert_nonNeg(self.k, "k")
             assert (self.k + self.D) * self.N <= self.Ps
 
-        ass.ert_type(self.F, tuple, "F")
+        ass.ert_type(self.F, list, "F")
         assert 2 == len(self.F)
         for i in range(2):
             ass.ert_type(self.F[i], int, f"F[{i}]")
             assert self.F[i] >= 0
         assert self.F[1] >= self.F[0]
 
-        ass.ert_type(self.Gs, tuple, "Gs")
+        ass.ert_type(self.Gs, list, "Gs")
         assert 2 == len(self.Gs)
         for i in range(2):
             ass.ert_type(self.Gs[i], float, f"Gs[{i}]")

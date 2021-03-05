@@ -3,6 +3,7 @@
 @contact: gigi.ga90@gmail.com
 """
 
+import argparse
 import copy
 from ifpd2 import const
 import logging
@@ -81,7 +82,7 @@ class ChromosomeData(object):
     """ChromosomeData"""
 
     __allowed_fields = ("recordno", "size_nt", "size_bytes")
-    _data: Dict[bytes, Tuple[Dict[str, Any], ChromosomeIndex]]
+    _data: Dict[bytes, Dict[str, Any]]
     _record_byte_size: int
 
     def __init__(
@@ -97,7 +98,7 @@ class ChromosomeData(object):
 
         self._data = {}
         for chromosome in set(chromosome_set):
-            self._data[chromosome] = ({}, ChromosomeIndex(index_bin_size))
+            self._data[chromosome] = dict(index=ChromosomeIndex(index_bin_size))
 
     @property
     def record_byte_size(self) -> int:
@@ -109,36 +110,41 @@ class ChromosomeData(object):
     def keys(self) -> List[bytes]:
         return list(self._data.keys())
 
+    def items(self) -> List[Tuple[bytes, Dict[str, Any]]]:
+        pass
+
     @property
     def sizes_nt(self) -> Dict[bytes, int]:
         return dict(
-            [(name, details[0]["size_nt"]) for name, details in self._data.items()]
+            [(name, details["size_nt"]) for name, details in self._data.items()]
         )
 
     @property
     def sizes_bytes(self) -> Dict[bytes, int]:
         return dict(
-            [(name, details[0]["size_bytes"]) for name, details in self._data.items()]
+            [(name, details["size_bytes"]) for name, details in self._data.items()]
         )
 
     @property
     def recordnos(self) -> Dict[bytes, int]:
         return dict(
-            [(name, details[0]["recordno"]) for name, details in self._data.items()]
+            [(name, details["recordno"]) for name, details in self._data.items()]
         )
 
     def set(self, chromosome: bytes, key: str, value: int) -> None:
+        if "index" == key:
+            logging.warning(f"access precluded to '{key}' key")
         if chromosome not in self._data:
             raise KeyError(f"key '{chromosome.decode()}' not found")
         if key not in self.__allowed_fields:
             raise KeyError(f"key '{key}' not found")
-        self._data[chromosome][0][key] = value
+        self._data[chromosome][key] = value
 
-    def get_details(self, chromosome: bytes) -> Dict[str, int]:
-        return copy.copy(self._data[chromosome][0])
+    def chromosome_details(self, chromosome: bytes) -> Dict[str, int]:
+        return copy.copy(self._data[chromosome])
 
-    def get_index(self, chromosome: bytes) -> ChromosomeIndex:
-        return copy.copy(self._data[chromosome][1])
+    def chromosome_index(self, chromosome: bytes) -> ChromosomeIndex:
+        return copy.copy(self._data[chromosome]["index"])
 
     def populate(self, chrom_db: pd.DataFrame) -> None:
         assert "chromosome" in chrom_db.columns
@@ -150,10 +156,10 @@ class ChromosomeData(object):
             "size_bytes",
             chrom_db.shape[0] * self._record_byte_size,
         )
-        self._data[selected_chrom][1].build(chrom_db, self._record_byte_size)
+        self._data[selected_chrom]["index"].build(chrom_db, self._record_byte_size)
 
     def __check__(self) -> None:
-        for chromosome, (details, _) in self._data.items():
+        for chromosome, details in self._data.items():
             assert (
                 "size_nt" in details
             ), f"missing nt size information for '{chromosome.decode()}'"
@@ -193,6 +199,9 @@ class Record(object):
 
             current_location += byte_size
 
+    def to_dataframe(self) -> pd.DataFrame:
+        return pd.DataFrame(self._data, index=[0])
+
     def to_csv(self, sep: str = ",") -> str:
         csv_fields: List[str] = []
         for x in const.database_columns:
@@ -203,8 +212,59 @@ class Record(object):
                 csv_fields.append(str(data))
         return sep.join(csv_fields)
 
+    @staticmethod
+    def __norm_value_in_range(v, r):
+        if 0 == r[1]:
+            return np.nan
+        return (v - r[0]) / (r[1] - r[0])
+
+    def __update_score_by_nOT(self, F):
+        off_target_no = self._data["off_target_no"]
+        if off_target_no <= F[0]:
+            self._data["score"] = 0
+            return
+        if off_target_no > F[1]:
+            self._data["score"] = np.inf
+            return
+        return self.__norm_value_in_range(off_target_no, F)
+
+    def __update_score_by_dG_Tm(self, Gs):
+        ss_dG = self._data["ss_dG"]
+        tm_dG = self._data["Tm_dG"]
+        if ss_dG >= tm_dG * min(Gs):
+            self._data["score"] = 0
+            return
+        if ss_dG < tm_dG * max(Gs):
+            self._data["score"] = np.inf
+            return
+        return self.__norm_value_in_range(ss_dG, [tm_dG * f for f in Gs])
+
+    def __update_score_by_dG_Gs(self, Gs):
+        ss_dG = self._data["ss_dG"]
+        if ss_dG >= Gs[0]:
+            self._data["score"] = 0
+            return
+        if ss_dG < Gs[1]:
+            self._data["score"] = np.inf
+            return
+        return self.__norm_value_in_range(ss_dG, Gs)
+
+    def add_score(self, F, Gs) -> None:
+        norm_nOT = self.__update_score_by_nOT(F)
+        if norm_nOT is None:
+            return
+        if all([x >= 0 for x in Gs]):
+            norm_ss_dG = self.__update_score_by_dG_Tm(Gs)
+        else:
+            norm_ss_dG = self.__update_score_by_dG_Gs(Gs)
+        if norm_ss_dG is None:
+            return
+        self._data["score"] = np.mean([norm_nOT, norm_ss_dG])
+
     def __getitem__(self, key: str) -> Any:
-        if key not in const.database_columns:
+        allowed_columns = ["score"]
+        allowed_columns.extend(const.database_columns)
+        if key not in allowed_columns:
             raise KeyError(f"unrecognized key '{key}'")
         else:
             return self.data[key]
@@ -217,7 +277,9 @@ class DataBase(object):
     """Buffering and checking class for ifpd2 database."""
 
     _root: str
-    _details: Dict[str, Any]
+    _args: argparse.Namespace
+    _chromosomes: ChromosomeData
+    _dtype: Dict[str, str]
     _record_byte_size: int
 
     def __init__(self, path: str):
@@ -227,76 +289,81 @@ class DataBase(object):
         assert os.path.isfile(db_pickle_path), f"'db.pickle is missing in '{path}'"
 
         with open(db_pickle_path, "rb") as IH:
-            self._details = pickle.load(IH)
+            details = pickle.load(IH)
+            self._chromosomes = details["chromosomes"]
+            self._dtype = details["dtype"]
 
-        assert "chromosomes" in self._details
-        assert isinstance(self._details["chromosomes"], ChromosomeData)
-        self._details["chromosomes"].__check__()
+        assert isinstance(self._chromosomes, ChromosomeData)
+        self._chromosomes.__check__()
         for chromosome in self.chromosome_list:
             chromosome_path = os.path.join(path, f"{chromosome.decode()}.bin")
             assert os.path.isfile(
                 chromosome_path
             ), f"missing expected chromosome file: '{chromosome_path}'"
 
-        self._record_byte_size = get_dtype_length(self._details["dtype"])
+        self._record_byte_size = get_dtype_length(self._dtype)
         assert self._record_byte_size > 0
 
         self._root = path
 
     @property
+    def path(self):
+        return self._root
+
+    @property
     def chromosome_list(self) -> List[bytes]:
-        return self._details["chromosomes"].keys()
+        return self._chromosomes.keys()
 
     @property
     def chromosome_sizes_nt(self) -> Dict[bytes, int]:
-        return self._details["chromosomes"].sizes_nt
+        return self._chromosomes.sizes_nt
 
     @property
     def chromosome_sizes_bytes(self) -> Dict[bytes, int]:
-        return self._details["chromosomes"].sizes_bytes
+        return self._chromosomes.sizes_bytes
 
     @property
     def chromosome_recordnos(self) -> Dict[bytes, int]:
-        return self._details["chromosomes"].recordnos
+        return self._chromosomes.recordnos
 
     def log_details(self) -> None:
-        logging.info(f"Database name: {self._details['args'].output}")
-        logging.info(f"Sequence max length: {self._details['dtype']['sequence'][2:]}")
+        logging.info(f"Database name: {self._args.output}")
+        logging.info(f"Sequence max length: {self._dtype['sequence'][2:]}")
         logging.info("")
         logging.info("[bold]## Input files[/bold]")
-        logging.info(f"hush files: {self._details['args'].hush}")
-        logging.info(f"oligo-melting files: {self._details['args'].melting}")
-        logging.info(f"OligoArrayAux files: {self._details['args'].secondary}")
+        logging.info(f"hush files: {self._args.hush}")
+        logging.info(f"oligo-melting files: {self._args.melting}")
+        logging.info(f"OligoArrayAux files: {self._args.secondary}")
         logging.info("")
         logging.info("[bold]## Chromosome details[/bold]")
-        logging.info(f"Expecting {len(self._details['chromosomes'])} chromosomes.")
+        logging.info(f"Expecting {len(self._chromosomes)} chromosomes.")
         logging.info("Chromosomes:")
-        for chromosome, details in self._details["chromosomes"].items():
+        for chromosome, details in self._chromosomes.items():
             empty_label = "".join([" " for c in chromosome.decode()])
             logging.info(f"\t{chromosome.decode()} => size : {details['size']}")
             logging.info(f"\t{empty_label} => recordno : {details['recordno']}")
         logging.info("")
         logging.info("[bold]Record details[/bold]")
         logging.info(f"Record size in bytes: {self._record_byte_size}")
-        logging.info(f"Dtype: {self._details['dtype']}")
+        logging.info(f"Dtype: {self._dtype}")
 
     def __read_next_record(self, IH: IO) -> bytes:
         return IH.read(self._record_byte_size)
 
-    def walk_chromosome(
+    def buffer(
         self, chromosome: bytes, start_from_nt: int = 0, end_at_nt: int = -1
     ) -> Iterator[Record]:
-        assert chromosome in self._details["chromosomes"].keys()
+        assert chromosome in self._chromosomes.keys()
         with open(os.path.join(self._root, f"{chromosome.decode()}.bin"), "rb") as IH:
             if start_from_nt > 0:
-                position_in_bytes = self._details["chromosomes"].get_index(chromosome)[
+                position_in_bytes = self._chromosomes.chromosome_index(chromosome)[
                     start_from_nt
                 ]
                 if position_in_bytes > 0:
                     IH.seek(position_in_bytes)
             record = self.__read_next_record(IH)
             while 0 != len(record):
-                parsed_record = Record(record, self._details["dtype"])
+                parsed_record = Record(record, self._dtype)
                 if parsed_record["start"] > end_at_nt and end_at_nt > 0:
                     break
                 yield parsed_record

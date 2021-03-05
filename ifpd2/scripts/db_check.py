@@ -45,7 +45,7 @@ def run(args: argparse.Namespace) -> None:
     for chromosome in DB.chromosome_list:
         previous_position = -1
         for record in tqdm(
-            DB.walk_chromosome(chromosome),
+            DB.buffer(chromosome),
             desc=f"Checking sorting '{chromosome.decode()}'",
             total=DB.chromosome_recordnos[chromosome],
         ):

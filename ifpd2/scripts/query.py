@@ -10,7 +10,6 @@ from ifpd2.logging import add_log_file_handler
 from ifpd2.probe import OligoProbeBuilder
 from ifpd2.probe_set import OligoProbeSetBuilder
 import logging
-import numpy as np  # type: ignore
 import os
 
 
@@ -41,7 +40,6 @@ def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPars
         metavar=("chromStart", "chromEnd"),
         type=int,
         nargs=2,
-        default=(0, np.inf),
         help="""Start and end locations (space-separated) of the region of interest.
         When a region is not provided (or start/end coincide),
         the whole feature is queried.""",
@@ -114,18 +112,18 @@ def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPars
         metavar="nOT",
         type=int,
         nargs=2,
-        default=(0, 100),
-        help="""Acceptable range of off-targets. Default: (0,100)""",
+        default=[0, 99],
+        help="""Acceptable range of off-targets. Default: [0,99]""",
     )
     filters.add_argument(
         "-G",
         metavar="dG",
         type=float,
         nargs=2,
-        default=(0.0, 0.5),
+        default=[0.0, 0.5],
         help="""Acceptable range of secondary structure delta free energy. Either
         as absolute kcal/mol os as a fraction of delta free energy of hybridization.
-        Default: (.0,.5)""",
+        Default: [.0,.5]""",
     )
     filters.add_argument(
         "-o",
@@ -144,7 +142,7 @@ def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPars
     filters.add_argument(
         "-P",
         metavar="size",
-        type=float,
+        type=int,
         default=10000,
         help="""Maximum probe size in nt. Default: 10000""",
     )
@@ -218,9 +216,11 @@ def assert_reusable(args):
 @enable_rich_assert
 def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
     assert not all([isinstance(args.X, type(None)), isinstance(args.W, type(None))])
-    args.start, args.end = args.region
-    args.start = int(args.start)
-    if not np.isfinite(args.end):
+    if args.region is None:
+        args.region = [0, -1]
+    else:
+        assert args.region[1] > args.region[0]
+    if args.region[1] <= 0:
         args.X = None
         logging.info(
             " ".join(
@@ -230,12 +230,9 @@ def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
                 ]
             )
         )
-    args.end = int(args.end) if np.isfinite(args.end) else 0
 
-    if args.R > 1:
-        args.R = int(args.R)
-    if args.r > 1:
-        args.r = int(args.r)
+    args.R = int(args.R) if args.R > 1 else float(args.R)
+    args.r = int(args.r) if args.r > 1 else float(args.r)
 
     if args.single:
         args.X = 1
@@ -263,7 +260,7 @@ def run(args: argparse.Namespace) -> None:
     opb.Po = args.I
     opb.k = args.k
     opb.F = args.F
-    opb.Gs = (float(args.G[0]), float(args.G[1]))
+    opb.Gs = args.G
     opb.Ot = args.o
 
     opsb = OligoProbeSetBuilder(os.path.join(args.O, "probe_sets"))
@@ -271,8 +268,8 @@ def run(args: argparse.Namespace) -> None:
 
     ow = Walker(args.database)
     ow.C = args.chrom
-    ow.S = args.start
-    ow.E = args.end
+    ow.S = args.region[0]
+    ow.E = args.region[1] if args.region[1] >= 0 else 0
     ow.X = args.X
     ow.Ws = args.W
     ow.Wh = args.w
@@ -282,7 +279,13 @@ def run(args: argparse.Namespace) -> None:
     ow.reuse = args.reuse
     ow.threads = args.threads
 
-    ow.start(N=args.N, opb=opb, cfr_step=ow.Rt)
+    ow.start(
+        start_from_nt=args.region[0],
+        end_at_nt=args.region[1],
+        N=args.N,
+        opb=opb,
+        cfr_step=ow.Rt,
+    )
 
     opsb.build(ow.walk_results)
     opsb.export()

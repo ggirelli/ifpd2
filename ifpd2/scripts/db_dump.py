@@ -83,7 +83,7 @@ def run(args: argparse.Namespace) -> None:
     print("\t".join(const.database_columns))
     for chromosome in chromosome_list:
         walker = tqdm(
-            DB.walk_chromosome(chromosome, args.region[0], args.region[1]),
+            DB.buffer(chromosome, args.region[0], args.region[1]),
             desc=f"dumping '{chromosome.decode()}'",
             total=DB.chromosome_recordnos[chromosome],
         )
