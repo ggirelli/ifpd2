@@ -32,8 +32,8 @@ class ChromosomeIndex(object):
     def __init_index(self, chrom_db: pd.DataFrame) -> None:
         self._index = {}
         chrom_size_nt = chrom_db["end"].values.max()
-        for bin_id in range(0, chrom_size_nt, self._bin_size):
-            self._index[bin_id] = (0, 0)
+        for bin_id in range(0, (chrom_size_nt // self._bin_size) + 1):
+            self._index[bin_id] = (np.inf, 0)
 
     def build(self, chrom_db: pd.DataFrame, record_byte_size: int) -> None:
         for colname in ("chromosome", "start", "end"):
@@ -68,7 +68,13 @@ class ChromosomeIndex(object):
     def __getitem__(self, position_in_nt: int) -> int:
         assert self._index is not None
         binned_to = position_in_nt // self._bin_size
-        return self._index[binned_to][0]
+        if binned_to not in self._index:
+            return -1
+
+        position_in_bytes = self._index[binned_to][0]
+        if not np.isfinite(position_in_bytes):
+            return -1
+        return position_in_bytes
 
 
 class ChromosomeData(object):
@@ -146,6 +152,18 @@ class ChromosomeData(object):
         )
         self._data[selected_chrom][1].build(chrom_db, self._record_byte_size)
 
+    def __check__(self) -> None:
+        for chromosome, (details, _) in self._data.items():
+            assert (
+                "size_nt" in details
+            ), f"missing nt size information for '{chromosome.decode()}'"
+            assert (
+                "size_bytes" in details
+            ), f"missing byte size information for '{chromosome.decode()}'"
+            assert (
+                "recordno" in details
+            ), f"missing size information for '{chromosome.decode()}'"
+
 
 class Record(object):
     """DataBase Record"""
@@ -211,13 +229,14 @@ class DataBase(object):
         with open(db_pickle_path, "rb") as IH:
             self._details = pickle.load(IH)
 
-        for chromosome, details in self._details["chromosomes"].items():
+        assert "chromosomes" in self._details
+        assert isinstance(self._details["chromosomes"], ChromosomeData)
+        self._details["chromosomes"].__check__()
+        for chromosome in self.chromosome_list:
             chromosome_path = os.path.join(path, f"{chromosome.decode()}.bin")
             assert os.path.isfile(
                 chromosome_path
             ), f"missing expected chromosome file: '{chromosome_path}'"
-            assert "size" in details, f"missing size information for '{chromosome}'"
-            assert "recordno" in details, f"missing size information for '{chromosome}'"
 
         self._record_byte_size = get_dtype_length(self._details["dtype"])
         assert self._record_byte_size > 0
@@ -230,15 +249,15 @@ class DataBase(object):
 
     @property
     def chromosome_sizes_nt(self) -> Dict[bytes, int]:
-        return self._details["chromosomes"].sizes_nt()
+        return self._details["chromosomes"].sizes_nt
 
     @property
     def chromosome_sizes_bytes(self) -> Dict[bytes, int]:
-        return self._details["chromosomes"].sizes_bytes()
+        return self._details["chromosomes"].sizes_bytes
 
     @property
     def chromosome_recordnos(self) -> Dict[bytes, int]:
-        return self._details["chromosomes"].recordnos()
+        return self._details["chromosomes"].recordnos
 
     def log_details(self) -> None:
         logging.info(f"Database name: {self._details['args'].output}")
@@ -264,10 +283,21 @@ class DataBase(object):
     def __read_next_record(self, IH: IO) -> bytes:
         return IH.read(self._record_byte_size)
 
-    def walk_chromosome(self, chromosome: bytes) -> Iterator[Record]:
+    def walk_chromosome(
+        self, chromosome: bytes, start_from_nt: int = 0, end_at_nt: int = -1
+    ) -> Iterator[Record]:
         assert chromosome in self._details["chromosomes"].keys()
         with open(os.path.join(self._root, f"{chromosome.decode()}.bin"), "rb") as IH:
+            if start_from_nt > 0:
+                position_in_bytes = self._details["chromosomes"].get_index(chromosome)[
+                    start_from_nt
+                ]
+                if position_in_bytes > 0:
+                    IH.seek(position_in_bytes)
             record = self.__read_next_record(IH)
             while 0 != len(record):
-                yield Record(record, self._details["dtype"])
+                parsed_record = Record(record, self._details["dtype"])
+                if parsed_record["start"] > end_at_nt and end_at_nt > 0:
+                    break
+                yield parsed_record
                 record = self.__read_next_record(IH)
