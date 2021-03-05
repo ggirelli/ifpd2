@@ -64,7 +64,10 @@ class ChromosomeIndex(object):
             self._index[0] = (0, 0)
         for bin_id, (start, end) in self._index.items():
             if not np.isfinite(start):
-                self._index[bin_id] = (self._index[bin_id-1][1], self._index[bin_id-1][1])
+                self._index[bin_id] = (
+                    self._index[bin_id - 1][1],
+                    self._index[bin_id - 1][1],
+                )
 
     def build(
         self,
