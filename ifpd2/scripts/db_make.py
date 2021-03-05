@@ -84,7 +84,7 @@ OligoArrayAux name (3rd field of 1st column).
         "-b",
         "--binsize",
         metavar="indexBin",
-        default=1000000,
+        default=const.DEFAULT_DATABASE_INDEX_BIN_SIZE,
         type=int,
         help="Binning for the index.",
     )

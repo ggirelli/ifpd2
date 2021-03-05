@@ -38,6 +38,8 @@ dtype_header_features = dict(
     ]
 )
 
+DEFAULT_DATABASE_INDEX_BIN_SIZE = 100000
+
 database_columns = [
     "name",
     "chromosome",

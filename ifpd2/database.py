@@ -90,7 +90,7 @@ class ChromosomeData(object):
         self,
         chromosome_set: Set[bytes],
         dtype: Dict[str, str],
-        index_bin_size: int = 100000,
+        index_bin_size: int = const.DEFAULT_DATABASE_INDEX_BIN_SIZE,
     ):
         super(ChromosomeData, self).__init__()
 
