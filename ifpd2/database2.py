@@ -90,9 +90,14 @@ class ChromosomeData(object):
         index_bin_size: int = 100000,
     ):
         super(ChromosomeData, self).__init__()
+        self._data = {}
         for chromosome in set(chromosome_set):
             self._data[chromosome] = {}
         self._index = ChromosomeIndex(index_bin_size, dtype)
+
+    @property
+    def index(self):
+        return self._index
 
     def __len__(self) -> int:
         return len(self._data)
