@@ -233,6 +233,12 @@ def write_database(
         )
         for selected_chrom in chromosome_data.keys():
             chromosome_db = dbdf.loc[selected_chrom == dbdf["chromosome"], :]
+
+            logging.info(f"sorting records for {chromosome.decode()}")
+            chromosome_db.sort_values(
+                by="start", axis=1, kind="mergesort", inplace=True
+            )
+
             chromosome_data[selected_chrom]["size"] = chromosome_db["end"].values.max()
             chromosome_data[selected_chrom]["recordno"] = chromosome_db.shape[0]
             with open(
