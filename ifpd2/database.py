@@ -36,20 +36,12 @@ class ChromosomeIndex(object):
         for bin_id in range(0, (chrom_size_nt // self._bin_size) + 1):
             self._index[bin_id] = (np.inf, 0)
 
-    def build(
+    def __populate_bins(
         self,
         chrom_db: pd.DataFrame,
         record_byte_size: int,
         track: Tuple[Progress, TaskID],
     ) -> None:
-        for colname in ("chromosome", "start", "end"):
-            assert colname in chrom_db.columns, f"missing '{colname}' column"
-
-        self.__init_index(chrom_db)
-
-        chromosome_set: Set[bytes] = set(chrom_db["chromosome"].values)
-        assert 1 == len(chromosome_set)
-
         current_position = -1
         for i in range(chrom_db.shape[0]):
             track[0].update(track[1], advance=1)
@@ -66,6 +58,28 @@ class ChromosomeIndex(object):
             if bin_end < position_in_bytes:
                 bin_end = position_in_bytes
             self._index[binned_to] = (bin_start, bin_end)
+
+    def __fill_empty_bins(self) -> None:
+        if not np.isfinite(self._index[0][0]):
+            self._index[0] = (0, 0)
+        for bin_id, (start, end) in self._index.items():
+            if not np.isfinite(start):
+                self._index[bin_id] = (self._index[bin_id-1][1], self._index[bin_id-1][1])
+
+    def build(
+        self,
+        chrom_db: pd.DataFrame,
+        record_byte_size: int,
+        track: Tuple[Progress, TaskID],
+    ) -> None:
+        for colname in ("chromosome", "start", "end"):
+            assert colname in chrom_db.columns, f"missing '{colname}' column"
+        chromosome_set: Set[bytes] = set(chrom_db["chromosome"].values)
+        assert 1 == len(chromosome_set)
+
+        self.__init_index(chrom_db)
+        self.__populate_bins(chrom_db, record_byte_size, track)
+        self.__fill_empty_bins()
 
     def __getitem__(self, position_in_nt: int) -> int:
         assert self._index is not None
