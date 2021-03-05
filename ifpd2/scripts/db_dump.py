@@ -9,6 +9,7 @@ from ifpd2 import const
 from ifpd2.database import DataBase
 from ifpd2.scripts import arguments as ap
 from tqdm import tqdm  # type: ignore
+from typing import List
 
 
 def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
@@ -66,26 +67,40 @@ def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 
-@enable_rich_assert
-def run(args: argparse.Namespace) -> None:
-    DB = DataBase(args.input)
-
+def get_chromosome_list(args: argparse.Namespace, DB: DataBase) -> List[bytes]:
     chromosome_list = DB.chromosome_list
     if args.chrom is not None:
         assert args.chrom.encode() in chromosome_list, f"'{args.chrom}' not found"
         chromosome_list = [args.chrom.encode()]
+    return chromosome_list
 
-    if args.region_start is not None:
-        chrom_size_nt = DB.chromosome_sizes_nt[args.chrom.encode()]
-        assert args.region[0] < chrom_size_nt
-        args.region[0] = args.region_start
 
+def dump(args: argparse.Namespace, DB: DataBase) -> None:
     print("\t".join(const.database_columns))
-    for chromosome in chromosome_list:
+    for chromosome in get_chromosome_list(args, DB):
         walker = tqdm(
             DB.buffer(chromosome, args.region[0], args.region[1]),
             desc=f"dumping '{chromosome.decode()}'",
             total=DB.chromosome_recordnos[chromosome],
         )
         for record in walker:
+            if args.region[0] > record["start"]:
+                continue
             print(record.to_csv("\t"))
+
+
+@enable_rich_assert
+def run(args: argparse.Namespace) -> None:
+    DB = DataBase(args.input)
+
+    if args.region_start is not None:
+        chrom_size_nt = DB.chromosome_sizes_nt[args.chrom.encode()]
+        assert args.region_start < chrom_size_nt, " ".join(
+            [
+                f"requested window starts ({args.region_start})",
+                f"after the chromosome end ({chrom_size_nt})",
+            ]
+        )
+        args.region[0] = args.region_start
+
+    dump(args, DB)

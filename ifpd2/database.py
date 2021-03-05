@@ -112,7 +112,7 @@ class ChromosomeData(object):
         return list(self._data.keys())
 
     def items(self) -> List[Tuple[bytes, Dict[str, Any]]]:
-        pass
+        return list(self._data.items())
 
     @property
     def sizes_nt(self) -> Dict[bytes, int]:
@@ -295,6 +295,7 @@ class DataBase(object):
             details = pickle.load(IH)
             self._chromosomes = details["chromosomes"]
             self._dtype = details["dtype"]
+            self._args = details["args"]
 
         assert isinstance(self._chromosomes, ChromosomeData)
         self._chromosomes.__check__()
@@ -343,7 +344,10 @@ class DataBase(object):
         logging.info("Chromosomes:")
         for chromosome, details in self._chromosomes.items():
             empty_label = "".join([" " for c in chromosome.decode()])
-            logging.info(f"\t{chromosome.decode()} => size : {details['size']}")
+            logging.info(f"\t{chromosome.decode()} => size : {details['size_nt']} (nt)")
+            logging.info(
+                f"\t{chromosome.decode()} => size : {details['size_bytes']} (bytes)"
+            )
             logging.info(f"\t{empty_label} => recordno : {details['recordno']}")
         logging.info("")
         logging.info("[bold]Record details[/bold]")
