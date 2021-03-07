@@ -170,7 +170,7 @@ def reduce_sequence_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_sequence_details(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
+def parse_sequences(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
     logging.info("adding sequence feature columns: length and GC-content")
     sequence_length_list: List[int] = []
     gc_content_list: List[float] = []
@@ -184,9 +184,7 @@ def add_sequence_details(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]
             (sequence.count(b"G") + sequence.count(b"C")) / len(sequence)
         )
 
-    df["sequence_length"] = sequence_length_list
     df["gc_content"] = gc_content_list
-
     dtype = copy.copy(const.dtype_sequence_features)
     dtype["sequence"] = f"|S{max(sequence_length_list)}"
     return (df.astype(dtype), dtype)
@@ -203,14 +201,22 @@ def parse_record_headers(
     start_list: List[int] = []
     end_list: List[int] = []
 
-    for header in track(db.index, description="parsing record headers", transient=True):
-        name, position = header.split(" ")
+    for record in track(
+        db.itertuples(),
+        total=db.shape[0],
+        description="parsing record headers",
+        transient=True,
+    ):
+        name, position = record.Index.split(" ")
         name_list.append(name)
         name_length_set.add(len(name))
         chromosome, extremes = position.split("=")[1].split(":")
         chromosome_list.append(f"{chromosome_prefix}{chromosome}")
         chromosome_length_set.add(len(f"{chromosome_prefix}{chromosome}"))
         start, end = [int(x) for x in extremes.split("-")]
+        assert (end - start) == len(
+            record.sequence
+        ), f"{end - start} != {len(record.sequence)}"
         start_list.append(start)
         end_list.append(end)
 
@@ -232,11 +238,14 @@ def write_database(
     dbdf: pd.DataFrame, dtype: Dict[str, str], args: argparse.Namespace
 ) -> None:
     with Progress() as progress:
-        chrom_data = db.ChromosomeDict(progress)
-        chromosome_track = progress.add_task(
-            "exporting chromosome", total=len(chrom_data), transient=True
+        chromosome_set: Set[bytes] = set(dbdf["chromosome"].values)
+        chromosome_data = db.ChromosomeDict(args.binsize)
+        chromosome_task = progress.add_task(
+            "exporting chromosome",
+            total=len(chromosome_set),
+            transient=True,
         )
-        for selected_chrom in chrom_data.keys():
+        for selected_chrom in chromosome_set:
             chromosome_db = dbdf.loc[selected_chrom == dbdf["chromosome"], :]
 
             logging.info(f"sorting records for {selected_chrom.decode()}")
@@ -244,7 +253,7 @@ def write_database(
                 by="start", axis=0, kind="mergesort", inplace=True
             )
             logging.info(f"building index for {selected_chrom.decode()}")
-            chrom_data.add_chromosome(chromosome_db, dtype, args.binsize)
+            chromosome_data.add_chromosome(chromosome_db, dtype, progress)
 
             with open(
                 os.path.join(args.output, f"{selected_chrom.decode()}.bin"), "wb"
@@ -259,13 +268,13 @@ def write_database(
                 ):
                     IH.write(record.tobytes())
                     progress.update(writing_track, advance=1)
-            progress.update(chromosome_track, advance=1)
+            progress.update(chromosome_task, advance=1)
 
     logging.info("writing db.pickle")
     with open(os.path.join(args.output, "db.pickle"), "wb") as OH:
         args.parse = None
         args.run = None
-        pickle.dump(dict(chromosomes=chrom_data, dtype=dtype, args=args), OH)
+        pickle.dump(dict(chromosomes=chromosome_data, dtype=dtype, args=args), OH)
 
 
 @enable_rich_assert
@@ -281,7 +290,7 @@ def run(args: argparse.Namespace) -> None:
     dbdf = populate_db(dbdf, args.secondary, io.parse_secondary, "OligoArrayAux")
 
     dbdf = reduce_sequence_columns(dbdf)
-    dbdf, dtype_sequence = add_sequence_details(dbdf)
+    dbdf, dtype_sequence = parse_sequences(dbdf)
     dbdf, dtype_header = parse_record_headers(dbdf, args.prefix)
 
     dtype = dict()

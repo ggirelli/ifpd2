@@ -25,7 +25,6 @@ dtype_secondary = dict([("ss_dG", "<f4")])
 dtype_sequence_features = dict(
     [
         ("sequence", "|S"),
-        ("sequence_length", "<u4"),
         ("gc_content", "<f4"),
     ]
 )
@@ -45,7 +44,6 @@ database_columns = [
     "chromosome",
     "start",
     "end",
-    "sequence_length",
     "sequence",
     "gc_content",
     "off_target_no",

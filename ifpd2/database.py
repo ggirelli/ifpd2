@@ -106,8 +106,6 @@ class ChromosomeData(object):
     _index: ChromosomeIndex
     _record_byte_size: int
 
-    __progress: Progress
-
     def __init__(
         self,
         chromosome_db: pd.DataFrame,
@@ -119,7 +117,7 @@ class ChromosomeData(object):
 
         assert "chromosome" in chromosome_db.columns
         selected_chrom = chromosome_db["chromosome"][0]
-        assert 1 == len(set(chromosome_db["chromosome"].value))
+        assert 1 == len(set(chromosome_db["chromosome"].values))
 
         self._record_byte_size = get_dtype_length(dtype)
         assert self._record_byte_size > 0
@@ -129,8 +127,7 @@ class ChromosomeData(object):
         self._size_nt = chromosome_db["end"].values.max()
         self._size_bytes = chromosome_db.shape[0] * self._record_byte_size
 
-        self.__progress = progress
-        self._build_index(chromosome_db, index_bin_size)
+        self._build_index(chromosome_db, index_bin_size, progress)
 
     @property
     def record_byte_size(self) -> int:
@@ -152,28 +149,33 @@ class ChromosomeData(object):
     def index(self):
         return copy.copy(self._index)
 
-    def _build_index(self, chromosome_db: pd.DataFrame, index_bin_size: int) -> None:
+    def _build_index(
+        self, chromosome_db: pd.DataFrame, index_bin_size: int, progress: Progress
+    ) -> None:
         assert index_bin_size > 0
-        indexing_track = self.__progress.add_task(
+        indexing_track = progress.add_task(
             f"indexing {self._name}.bin",
             total=chromosome_db.shape[0],
             transient=True,
         )
         self._index = ChromosomeIndex(index_bin_size)
         self._index.build(
-            chromosome_db, self._record_byte_size, (self.__progress, indexing_track)
+            chromosome_db, self._record_byte_size, (progress, indexing_track)
         )
+        progress.remove_task(indexing_track)
 
 
 class ChromosomeDict(object):
     """Wraps all chromosomes"""
 
+    _index_bin_size: int
     _data: Dict[bytes, ChromosomeData]
-    __progress: Progress
 
-    def __init__(self, progress: Progress):
+    def __init__(self, index_bin_size: int = const.DEFAULT_DATABASE_INDEX_BIN_SIZE):
         super(ChromosomeDict, self).__init__()
-        self.__progress = progress
+        self._data = {}
+        assert index_bin_size > 0
+        self._index_bin_size = index_bin_size
 
     def __len__(self) -> int:
         return len(self._data)
@@ -200,13 +202,10 @@ class ChromosomeDict(object):
         return copy.copy(self._data[chromosome])
 
     def add_chromosome(
-        self,
-        chromosome_db: pd.DataFrame,
-        dtype: Dict[str, str],
-        index_bin_size: int = const.DEFAULT_DATABASE_INDEX_BIN_SIZE,
+        self, chromosome_db: pd.DataFrame, dtype: Dict[str, str], progress: Progress
     ) -> None:
         self._data[chromosome_db["chromosome"][0]] = ChromosomeData(
-            chromosome_db, dtype, index_bin_size, self.__progress
+            chromosome_db, dtype, self._index_bin_size, progress
         )
 
 
