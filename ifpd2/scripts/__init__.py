@@ -4,7 +4,8 @@
 """
 
 from ifpd2.scripts import arguments, ifpd2
-from ifpd2.scripts import db, db_check, db_dump, db_info, db_make, db_merge
+from ifpd2.scripts import db, db_check, db_dump, db_info
+from ifpd2.scripts import db_make, db_merge, db_reindex
 from ifpd2.scripts import query
 
 import logging
@@ -25,5 +26,6 @@ __all__ = [
     "db_info",
     "db_make",
     "db_merge",
+    "db_reindex",
     "query",
 ]

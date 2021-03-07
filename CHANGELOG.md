@@ -8,13 +8,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 ### Added
-- New entry points: `db make`, `db dump`, `db info`, and `db merge`.
+- New entry points: `db make`, `db dump`, `db info`, `db merge`, and `db_reindex`.
 - Module `io` with parsing functions for output generated via oligo-melting, hush, or OligoArrayAux.
 - Assert for compatibility with a given dtype. (only max value currently checked)
 
 ### Changed
 - New database format.
 - `dbchk` entry point changed to `db check`.
+- Dropped sequence length column, as it can be inferred from the end/start columns.
 
 ## [1.0.0-alpha] - 2021-02-26
 
