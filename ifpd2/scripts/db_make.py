@@ -231,9 +231,8 @@ def parse_record_headers(
 def write_database(
     dbdf: pd.DataFrame, dtype: Dict[str, str], args: argparse.Namespace
 ) -> None:
-    chrom_data = db.ChromosomeData(set(dbdf["chromosome"].values), dtype, args.binsize)
-
     with Progress() as progress:
+        chrom_data = db.ChromosomeDict(progress)
         chromosome_track = progress.add_task(
             "exporting chromosome", total=len(chrom_data), transient=True
         )
@@ -245,12 +244,7 @@ def write_database(
                 by="start", axis=0, kind="mergesort", inplace=True
             )
             logging.info(f"building index for {selected_chrom.decode()}")
-            indexing_track = progress.add_task(
-                f"indexing {selected_chrom.decode()}.bin",
-                total=chromosome_db.shape[0],
-                transient=True,
-            )
-            chrom_data.populate(chromosome_db, (progress, indexing_track))
+            chrom_data.add_chromosome(chromosome_db, dtype, args.binsize)
 
             with open(
                 os.path.join(args.output, f"{selected_chrom.decode()}.bin"), "wb"

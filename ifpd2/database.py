@@ -97,30 +97,83 @@ class ChromosomeIndex(object):
 
 
 class ChromosomeData(object):
-    """ChromosomeData"""
+    """Contains information on a chromosome"""
 
-    __allowed_fields = ("recordno", "size_nt", "size_bytes")
-    _data: Dict[bytes, Dict[str, Any]]
+    _name: str
+    _size_nt: int
+    _size_bytes: int
+    _recordno: int
+    _index: ChromosomeIndex
     _record_byte_size: int
+
+    __progress: Progress
 
     def __init__(
         self,
-        chromosome_set: Set[bytes],
+        chromosome_db: pd.DataFrame,
         dtype: Dict[str, str],
-        index_bin_size: int = const.DEFAULT_DATABASE_INDEX_BIN_SIZE,
+        index_bin_size: int,
+        progress: Progress,
     ):
         super(ChromosomeData, self).__init__()
+
+        assert "chromosome" in chromosome_db.columns
+        selected_chrom = chromosome_db["chromosome"][0]
+        assert 1 == len(set(chromosome_db["chromosome"].value))
 
         self._record_byte_size = get_dtype_length(dtype)
         assert self._record_byte_size > 0
 
-        self._data = {}
-        for chromosome in set(chromosome_set):
-            self._data[chromosome] = dict(index=ChromosomeIndex(index_bin_size))
+        self._name = selected_chrom
+        self._recordno = chromosome_db.shape[0]
+        self._size_nt = chromosome_db["end"].values.max()
+        self._size_bytes = chromosome_db.shape[0] * self._record_byte_size
+
+        self.__progress = progress
+        self._build_index(chromosome_db, index_bin_size)
 
     @property
     def record_byte_size(self) -> int:
         return self._record_byte_size
+
+    @property
+    def size_nt(self):
+        return self._size_nt
+
+    @property
+    def size_bytes(self):
+        return self._size_bytes
+
+    @property
+    def recordno(self):
+        return self._recordno
+
+    @property
+    def index(self):
+        return copy.copy(self._index)
+
+    def _build_index(self, chromosome_db: pd.DataFrame, index_bin_size: int) -> None:
+        assert index_bin_size > 0
+        indexing_track = self.__progress.add_task(
+            f"indexing {self._name}.bin",
+            total=chromosome_db.shape[0],
+            transient=True,
+        )
+        self._index = ChromosomeIndex(index_bin_size)
+        self._index.build(
+            chromosome_db, self._record_byte_size, (self.__progress, indexing_track)
+        )
+
+
+class ChromosomeDict(object):
+    """Wraps all chromosomes"""
+
+    _data: Dict[bytes, ChromosomeData]
+    __progress: Progress
+
+    def __init__(self, progress: Progress):
+        super(ChromosomeDict, self).__init__()
+        self.__progress = progress
 
     def __len__(self) -> int:
         return len(self._data)
@@ -128,67 +181,33 @@ class ChromosomeData(object):
     def keys(self) -> List[bytes]:
         return list(self._data.keys())
 
-    def items(self) -> List[Tuple[bytes, Dict[str, Any]]]:
+    def items(self) -> List[Tuple[bytes, ChromosomeData]]:
         return list(self._data.items())
 
     @property
     def sizes_nt(self) -> Dict[bytes, int]:
-        return dict(
-            [(name, details["size_nt"]) for name, details in self._data.items()]
-        )
+        return dict([(name, data.size_nt) for name, data in self._data.items()])
 
     @property
     def sizes_bytes(self) -> Dict[bytes, int]:
-        return dict(
-            [(name, details["size_bytes"]) for name, details in self._data.items()]
-        )
+        return dict([(name, data.size_bytes) for name, data in self._data.items()])
 
     @property
     def recordnos(self) -> Dict[bytes, int]:
-        return dict(
-            [(name, details["recordno"]) for name, details in self._data.items()]
-        )
+        return dict([(name, data.recordno) for name, data in self._data.items()])
 
-    def set(self, chromosome: bytes, key: str, value: int) -> None:
-        if "index" == key:
-            logging.warning(f"access precluded to '{key}' key")
-        if chromosome not in self._data:
-            raise KeyError(f"key '{chromosome.decode()}' not found")
-        if key not in self.__allowed_fields:
-            raise KeyError(f"key '{key}' not found")
-        self._data[chromosome][key] = value
-
-    def chromosome_details(self, chromosome: bytes) -> Dict[str, int]:
+    def get_chromosome(self, chromosome: bytes) -> ChromosomeData:
         return copy.copy(self._data[chromosome])
 
-    def chromosome_index(self, chromosome: bytes) -> ChromosomeIndex:
-        return copy.copy(self._data[chromosome]["index"])
-
-    def populate(self, chrom_db: pd.DataFrame, track: Tuple[Progress, TaskID]) -> None:
-        assert "chromosome" in chrom_db.columns
-        selected_chrom = chrom_db["chromosome"][0]
-        self.set(selected_chrom, "recordno", chrom_db.shape[0])
-        self.set(selected_chrom, "size_nt", chrom_db["end"].values.max())
-        self.set(
-            selected_chrom,
-            "size_bytes",
-            chrom_db.shape[0] * self._record_byte_size,
+    def add_chromosome(
+        self,
+        chromosome_db: pd.DataFrame,
+        dtype: Dict[str, str],
+        index_bin_size: int = const.DEFAULT_DATABASE_INDEX_BIN_SIZE,
+    ) -> None:
+        self._data[chromosome_db["chromosome"][0]] = ChromosomeData(
+            chromosome_db, dtype, index_bin_size, self.__progress
         )
-        self._data[selected_chrom]["index"].build(
-            chrom_db, self._record_byte_size, track
-        )
-
-    def __check__(self) -> None:
-        for chromosome, details in self._data.items():
-            assert (
-                "size_nt" in details
-            ), f"missing nt size information for '{chromosome.decode()}'"
-            assert (
-                "size_bytes" in details
-            ), f"missing byte size information for '{chromosome.decode()}'"
-            assert (
-                "recordno" in details
-            ), f"missing size information for '{chromosome.decode()}'"
 
 
 class Record(object):
@@ -298,7 +317,7 @@ class DataBase(object):
 
     _root: str
     _args: argparse.Namespace
-    _chromosomes: ChromosomeData
+    _chromosomes: ChromosomeDict
     _dtype: Dict[str, str]
     _record_byte_size: int
 
@@ -314,8 +333,7 @@ class DataBase(object):
             self._dtype = details["dtype"]
             self._args = details["args"]
 
-        assert isinstance(self._chromosomes, ChromosomeData)
-        self._chromosomes.__check__()
+        assert isinstance(self._chromosomes, ChromosomeDict)
         for chromosome in self.chromosome_list:
             chromosome_path = os.path.join(path, f"{chromosome.decode()}.bin")
             assert os.path.isfile(
@@ -359,13 +377,11 @@ class DataBase(object):
         logging.info("[bold]## Chromosome details[/bold]")
         logging.info(f"Expecting {len(self._chromosomes)} chromosomes.")
         logging.info("Chromosomes:")
-        for chromosome, details in self._chromosomes.items():
+        for chromosome, data in self._chromosomes.items():
             empty_label = "".join([" " for c in chromosome.decode()])
-            logging.info(f"\t{chromosome.decode()} => size : {details['size_nt']} (nt)")
-            logging.info(
-                f"\t{chromosome.decode()} => size : {details['size_bytes']} (bytes)"
-            )
-            logging.info(f"\t{empty_label} => recordno : {details['recordno']}")
+            logging.info(f"\t{chromosome.decode()} => size : {data.size_nt} (nt)")
+            logging.info(f"\t{chromosome.decode()} => size : {data.size_bytes} (bytes)")
+            logging.info(f"\t{empty_label} => recordno : {data.recordno}")
         logging.info("")
         logging.info("[bold]Record details[/bold]")
         logging.info(f"Record size in bytes: {self._record_byte_size}")
@@ -380,7 +396,7 @@ class DataBase(object):
         assert chromosome in self._chromosomes.keys()
         with open(os.path.join(self._root, f"{chromosome.decode()}.bin"), "rb") as IH:
             if start_from_nt > 0:
-                position_in_bytes = self._chromosomes.chromosome_index(chromosome)[
+                position_in_bytes = self._chromosomes.get_chromosome(chromosome).index[
                     start_from_nt
                 ]
                 if position_in_bytes > 0:
