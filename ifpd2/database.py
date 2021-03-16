@@ -6,207 +6,14 @@
 import argparse
 import copy
 from ifpd2 import const
+from ifpd2.chromosome import ChromosomeDict
+from ifpd2.io import get_dtype_length
 import logging
 import numpy as np  # type: ignore
 import os
 import pickle
 import pandas as pd  # type: ignore
-from rich.progress import Progress, TaskID  # type: ignore
-from typing import Any, Dict, IO, Iterator, List, Set, Tuple
-
-
-def get_dtype_length(dtype) -> int:
-    return sum([int(label.strip("><|SUuif")) for label in dtype.values()])
-
-
-class ChromosomeIndex(object):
-    """ChromosomeIndex"""
-
-    _bin_size: int
-    _index: Dict[int, Tuple[int, int]]
-
-    def __init__(self, bin_size: int):
-        super(ChromosomeIndex, self).__init__()
-        assert bin_size >= 1
-        self._bin_size = bin_size
-
-    def __init_index(self, chrom_db: pd.DataFrame) -> None:
-        self._index = {}
-        chrom_size_nt = chrom_db["end"].values.max()
-        for bin_id in range(0, (chrom_size_nt // self._bin_size) + 1):
-            self._index[bin_id] = (np.inf, 0)
-
-    def __populate_bins(
-        self,
-        chrom_db: pd.DataFrame,
-        record_byte_size: int,
-        track: Tuple[Progress, TaskID],
-    ) -> None:
-        current_position = -1
-        for i in range(chrom_db.shape[0]):
-            track[0].update(track[1], advance=1)
-            position_in_nt = chrom_db["start"].values[i]
-            assert position_in_nt > current_position
-            current_position = position_in_nt
-
-            position_in_bytes = record_byte_size * i
-            binned_to = position_in_nt // self._bin_size
-
-            bin_start, bin_end = list(self._index[binned_to])
-            if bin_start > position_in_bytes:
-                bin_start = position_in_bytes
-            if bin_end < position_in_bytes:
-                bin_end = position_in_bytes
-            self._index[binned_to] = (bin_start, bin_end)
-
-    def __fill_empty_bins(self) -> None:
-        if not np.isfinite(self._index[0][0]):
-            self._index[0] = (0, 0)
-        for bin_id, (start, end) in self._index.items():
-            if not np.isfinite(start):
-                self._index[bin_id] = (
-                    self._index[bin_id - 1][1],
-                    self._index[bin_id - 1][1],
-                )
-
-    def build(
-        self,
-        chrom_db: pd.DataFrame,
-        record_byte_size: int,
-        track: Tuple[Progress, TaskID],
-    ) -> None:
-        for colname in ("chromosome", "start", "end"):
-            assert colname in chrom_db.columns, f"missing '{colname}' column"
-        chromosome_set: Set[bytes] = set(chrom_db["chromosome"].values)
-        assert 1 == len(chromosome_set)
-
-        self.__init_index(chrom_db)
-        self.__populate_bins(chrom_db, record_byte_size, track)
-        self.__fill_empty_bins()
-
-    def __getitem__(self, position_in_nt: int) -> int:
-        assert self._index is not None
-        binned_to = position_in_nt // self._bin_size
-        if binned_to not in self._index:
-            return -1
-
-        position_in_bytes = self._index[binned_to][0]
-        if not np.isfinite(position_in_bytes):
-            return -1
-        return position_in_bytes
-
-
-class ChromosomeData(object):
-    """Contains information on a chromosome"""
-
-    _name: str
-    _size_nt: int
-    _size_bytes: int
-    _recordno: int
-    _index: ChromosomeIndex
-    _record_byte_size: int
-
-    def __init__(
-        self,
-        chromosome_db: pd.DataFrame,
-        dtype: Dict[str, str],
-        index_bin_size: int,
-        progress: Progress,
-    ):
-        super(ChromosomeData, self).__init__()
-
-        assert "chromosome" in chromosome_db.columns
-        selected_chrom = chromosome_db["chromosome"][0]
-        assert 1 == len(set(chromosome_db["chromosome"].values))
-
-        self._record_byte_size = get_dtype_length(dtype)
-        assert self._record_byte_size > 0
-
-        self._name = selected_chrom
-        self._recordno = chromosome_db.shape[0]
-        self._size_nt = chromosome_db["end"].values.max()
-        self._size_bytes = chromosome_db.shape[0] * self._record_byte_size
-
-        self._build_index(chromosome_db, index_bin_size, progress)
-
-    @property
-    def record_byte_size(self) -> int:
-        return self._record_byte_size
-
-    @property
-    def size_nt(self):
-        return self._size_nt
-
-    @property
-    def size_bytes(self):
-        return self._size_bytes
-
-    @property
-    def recordno(self):
-        return self._recordno
-
-    @property
-    def index(self):
-        return copy.copy(self._index)
-
-    def _build_index(
-        self, chromosome_db: pd.DataFrame, index_bin_size: int, progress: Progress
-    ) -> None:
-        assert index_bin_size > 0
-        indexing_track = progress.add_task(
-            f"indexing {self._name}.bin",
-            total=chromosome_db.shape[0],
-            transient=True,
-        )
-        self._index = ChromosomeIndex(index_bin_size)
-        self._index.build(
-            chromosome_db, self._record_byte_size, (progress, indexing_track)
-        )
-        progress.remove_task(indexing_track)
-
-
-class ChromosomeDict(object):
-    """Wraps all chromosomes"""
-
-    _index_bin_size: int
-    _data: Dict[bytes, ChromosomeData]
-
-    def __init__(self, index_bin_size: int = const.DEFAULT_DATABASE_INDEX_BIN_SIZE):
-        super(ChromosomeDict, self).__init__()
-        self._data = {}
-        assert index_bin_size > 0
-        self._index_bin_size = index_bin_size
-
-    def __len__(self) -> int:
-        return len(self._data)
-
-    def keys(self) -> List[bytes]:
-        return list(self._data.keys())
-
-    def items(self) -> List[Tuple[bytes, ChromosomeData]]:
-        return list(self._data.items())
-
-    @property
-    def sizes_nt(self) -> Dict[bytes, int]:
-        return dict([(name, data.size_nt) for name, data in self._data.items()])
-
-    @property
-    def sizes_bytes(self) -> Dict[bytes, int]:
-        return dict([(name, data.size_bytes) for name, data in self._data.items()])
-
-    @property
-    def recordnos(self) -> Dict[bytes, int]:
-        return dict([(name, data.recordno) for name, data in self._data.items()])
-
-    def get_chromosome(self, chromosome: bytes) -> ChromosomeData:
-        return copy.copy(self._data[chromosome])
-
-    def add_chromosome(
-        self, chromosome_db: pd.DataFrame, dtype: Dict[str, str], progress: Progress
-    ) -> None:
-        self._data[chromosome_db["chromosome"][0]] = ChromosomeData(
-            chromosome_db, dtype, self._index_bin_size, progress
-        )
+from typing import Any, Dict, IO, Iterator, List
 
 
 class Record(object):
@@ -223,18 +30,23 @@ class Record(object):
         return copy.copy(self._data)
 
     def __parse_bytes(self, record: bytes, column_dtypes: Dict[str, str]) -> None:
-        assert len(record) == get_dtype_length(column_dtypes)
+        """Parse record bytes.
 
+        Parses a record from its bytes based on column dtypes.
+
+        Arguments:
+            record {bytes} -- record bytes
+            column_dtypes {Dict[str, str]} -- column dtypes
+        """
+        assert len(record) == get_dtype_length(column_dtypes)
         self._data = {}
         current_location = 0
         for label in const.database_columns:
             dtype = column_dtypes[label]
             byte_size = get_dtype_length({label: dtype})
-
             self._data[label] = np.frombuffer(
                 record[current_location : (current_location + byte_size)], dtype
             )[0]
-
             current_location += byte_size
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -321,6 +133,10 @@ class DataBase(object):
     _record_byte_size: int
 
     def __init__(self, path: str):
+        """
+        Arguments:
+            path {str} -- absolute path to database folder
+        """
         super(DataBase, self).__init__()
         assert os.path.isdir(path), f"cannot find database folder '{path}'"
         db_pickle_path = os.path.join(path, "db.pickle")
@@ -365,6 +181,7 @@ class DataBase(object):
         return self._chromosomes.recordnos
 
     def log_details(self) -> None:
+        """Log database details."""
         logging.info(f"Database name: {self._args.output}")
         logging.info(f"Sequence max length: {self._dtype['sequence'][2:]}")
         logging.info("")
@@ -386,24 +203,158 @@ class DataBase(object):
         logging.info(f"Record size in bytes: {self._record_byte_size}")
         logging.info(f"Dtype: {self._dtype}")
 
-    def __read_next_record(self, IH: IO) -> bytes:
+    def __jump_to_bin(self, IH: IO, chromosome: bytes, start_from_nt: int = 0) -> None:
+        """Move buffer pointer to the first record of a bin.
+
+
+        Arguments:
+            IH {IO} -- database input handler
+            chromosome {bytes} -- chromosome label
+
+        Keyword Arguments:
+            start_from_nt {int} -- position in nucleotides (default: {0})
+        """
+        position_in_bytes = self._chromosomes.get_chromosome(chromosome).index[
+            start_from_nt
+        ]
+        IH.seek(position_in_bytes)
+
+    def read_next_record(self, IH: IO) -> bytes:
+        """Read the next record.
+
+        The buffer pointer moves to the start of the following record.
+
+        Arguments:
+            IH {IO} -- database input handle
+
+        Returns:
+            bytes -- record bytes
+        """
         return IH.read(self._record_byte_size)
+
+    def read_previous_record(self, IH: IO) -> bytes:
+        """Read the previous record.
+
+        The buffer pointer does not move.
+
+        Arguments:
+            IH {IO} -- database input handle
+
+        Returns:
+            bytes -- record bytes
+        """
+        self.rewind(IH)
+        return self.read_next_record(IH)
+
+    def read_next_record_and_rewind(self, IH: IO) -> bytes:
+        """Reads the next record.
+
+        The buffer pointer does not move.
+
+        Arguments:
+            IH {IO} -- database input handle
+
+        Returns:
+            bytes -- record bytes
+        """
+        record = self.read_next_record(IH)
+        self.rewind(IH)
+        return record
+
+    def next_record_exists(self, IH: IO) -> bool:
+        """Tries reading the next record.
+
+
+
+        Arguments:
+            IH {IO} -- database input handle
+
+        Returns:
+            bool -- whether next record exists
+        """
+        if 0 == len(self.read_next_record_and_rewind(IH)):
+            return False
+        return True
+
+    def rewind(self, IH: IO) -> None:
+        """Rewind of one record.
+
+        The buffer pointer moves to the beginning of the previous record.
+
+        Arguments:
+            IH {IO} -- database input handle
+        """
+        IH.seek(max(IH.tell() - self._record_byte_size, 0))
+
+    def skip(self, IH: IO) -> None:
+        """Skip one record.
+
+        The buffer pointer moves to the beginning of the following record.
+
+        Arguments:
+            IH {IO} -- database input handle
+        """
+        IH.seek(IH.tell() + self._record_byte_size)
+
+    def fastforward(self, IH: IO, chromosome: bytes, start_from_nt: int) -> None:
+        """Jump to the first record at a given position.
+
+        First the buffer pointer is moved to the beginning of the bin containing the
+        start_from_nt position. Then, records are read an parsed until their start is
+        greater than the start_from_nt value. Finally, the buffer pointer is moved to
+        the beginning of the last parsed record.
+
+        Arguments:
+            IH {IO} -- database input handle
+            chromosome {bytes} -- chromosome label
+            start_from_nt {int} -- position to fastforward to (in nucleotides)
+        """
+        if 0 == start_from_nt:
+            IH.seek(0)
+            return
+        self.__jump_to_bin(IH, chromosome, start_from_nt)
+
+        record_start = 0
+        while record_start < start_from_nt:
+            if self.next_record_exists(IH):
+                record_start = Record(self.read_next_record(IH), self._dtype)["start"]
+            else:
+                logging.warning(
+                    " ".join(
+                        [
+                            "the specified location",
+                            f"({chromosome.decode()}:{start_from_nt})",
+                            "is outside the database.",
+                        ]
+                    )
+                )
+                return
 
     def buffer(
         self, chromosome: bytes, start_from_nt: int = 0, end_at_nt: int = -1
     ) -> Iterator[Record]:
+        """Buffer a chromosome's records.
+
+        Buffer records from a chromosome withing the specified region.
+        To buffer the whole records, specify a [0, -1] region.
+
+        Arguments:
+            chromosome {bytes} -- chromosome label
+
+        Keyword Arguments:
+            start_from_nt {int} -- region starting position (default: {0})
+            end_at_nt {int} -- region end position (default: {-1})
+
+        Yields:
+            Iterator[Record] -- parsed record
+        """
         assert chromosome in self._chromosomes.keys()
         with open(os.path.join(self._root, f"{chromosome.decode()}.bin"), "rb") as IH:
-            if start_from_nt > 0:
-                position_in_bytes = self._chromosomes.get_chromosome(chromosome).index[
-                    start_from_nt
-                ]
-                if position_in_bytes > 0:
-                    IH.seek(position_in_bytes)
-            record = self.__read_next_record(IH)
+            self.fastforward(IH, chromosome, start_from_nt)
+            record = self.read_next_record(IH)
             while 0 != len(record):
                 parsed_record = Record(record, self._dtype)
                 if parsed_record["start"] > end_at_nt and end_at_nt > 0:
                     break
                 yield parsed_record
-                record = self.__read_next_record(IH)
+                record = self.read_next_record(IH)

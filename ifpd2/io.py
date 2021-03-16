@@ -9,11 +9,31 @@ from ifpd2 import const
 import logging
 import os
 import pandas as pd  # type: ignore
-from typing import List, Set, Tuple
+from typing import Dict, List, Set, Tuple
 from tqdm import tqdm  # type: ignore
 
 
+def get_dtype_length(dtype: Dict[str, str]) -> int:
+    """Calculate dtype record length in bytes.
+
+    Arguments:
+        dtype {Dict[str, str]} -- column dtype Dict[column_name: column_dtype]
+
+    Returns:
+        int -- length of record in bytes
+    """
+    return sum([int(label.strip("><|SUuif")) for label in dtype.values()])
+
+
 def parse_hush(path: str) -> pd.DataFrame:
+    """Parse HUSH output.
+
+    Arguments:
+        path {str} -- path to HUSH output file
+
+    Returns:
+        pd.DataFrame -- parsed HUSH data
+    """
     assert os.path.isfile(path), f"cannot find file '{path}'"
     logging.info(f"parsing: '{path}'")
     sequence_lengths: Set[int] = set()
@@ -39,6 +59,18 @@ def parse_hush(path: str) -> pd.DataFrame:
 
 
 def parse_melting(path: str, sep: str = "\t", header: bool = True) -> pd.DataFrame:
+    """Parse oligo-melting output.
+
+    Arguments:
+        path {str} -- path to oligo-melting output
+
+    Keyword Arguments:
+        sep {str} -- column separator (default: {"t"})
+        header {bool} -- whether to expect a header line (default: {True})
+
+    Returns:
+        pd.DataFrame -- parsed oligo-melting data
+    """
     assert os.path.isfile(path), f"cannot find file '{path}'"
     logging.info(f"parsing: '{path}'")
     expected_columns = copy.copy(const.dtype_melting)
@@ -54,6 +86,14 @@ def parse_melting(path: str, sep: str = "\t", header: bool = True) -> pd.DataFra
 
 
 def parse_secondary(path: str) -> pd.DataFrame:
+    """Parse OligoArrayAux .ct output.
+
+    Arguments:
+        path {str} -- path to OligoArrayAux .ct output
+
+    Returns:
+        pd.DataFrame -- parsed OligoArrayAux .ct data
+    """
     assert os.path.isfile(path), f"cannot find file '{path}'"
     logging.info(f"parsing: '{path}'")
     parsed_lines: List[Tuple[str, float]] = []
