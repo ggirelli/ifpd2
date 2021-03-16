@@ -7,6 +7,7 @@ import argparse
 from ifpd2.asserts import enable_rich_assert
 from ifpd2.database import DataBase
 from ifpd2.scripts import arguments as ap
+from ifpd2.walker2 import ChromosomeWalker
 import logging
 import os
 from tqdm import tqdm  # type: ignore
@@ -43,9 +44,10 @@ def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
 def run(args: argparse.Namespace) -> None:
     DB = DataBase(args.input)
     for chromosome in DB.chromosome_list:
+        walker = ChromosomeWalker(DB, chromosome)
         previous_position = -1
         for record in tqdm(
-            DB.buffer(chromosome),
+            walker.buffer(),
             desc=f"Checking sorting '{chromosome.decode()}'",
             total=DB.chromosome_recordnos[chromosome],
         ):

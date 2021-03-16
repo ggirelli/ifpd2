@@ -8,6 +8,7 @@ from ifpd2.asserts import enable_rich_assert
 from ifpd2 import const
 from ifpd2.database import DataBase
 from ifpd2.scripts import arguments as ap
+from ifpd2.walker2 import ChromosomeWalker
 from tqdm import tqdm  # type: ignore
 from typing import List
 
@@ -78,12 +79,12 @@ def get_chromosome_list(args: argparse.Namespace, DB: DataBase) -> List[bytes]:
 def dump(args: argparse.Namespace, DB: DataBase) -> None:
     print("\t".join(const.database_columns))
     for chromosome in get_chromosome_list(args, DB):
-        walker = tqdm(
-            DB.buffer(chromosome, args.region[0], args.region[1]),
+        walker = ChromosomeWalker(DB, chromosome)
+        for record in tqdm(
+            walker.buffer(args.region[0], args.region[1]),
             desc=f"dumping '{chromosome.decode()}'",
             total=DB.chromosome_recordnos[chromosome],
-        )
-        for record in walker:
+        ):
             if args.region[0] > record["start"]:
                 continue
             print(record.to_csv("\t"))

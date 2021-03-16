@@ -36,6 +36,14 @@ class ChromosomeIndex(object):
         for bin_id in range(0, (chrom_size_nt // self._bin_size) + 1):
             self._index[bin_id] = (np.inf, 0)
 
+    @property
+    def bin_size(self) -> int:
+        return self._bin_size
+
+    @property
+    def data(self) -> Dict[int, Tuple[int, int]]:
+        return copy.copy(self._index)
+
     def __populate_bins(
         self,
         chrom_db: pd.DataFrame,
@@ -114,6 +122,11 @@ class ChromosomeIndex(object):
             return -1
         return position_in_bytes
 
+    def __eq__(self, other) -> bool:
+        condition = self.bin_size == other.bin_size
+        condition = condition and self.data == other.data
+        return condition
+
 
 class ChromosomeData(object):
     """Contains information on a chromosome"""
@@ -153,19 +166,19 @@ class ChromosomeData(object):
         return self._record_byte_size
 
     @property
-    def size_nt(self):
+    def size_nt(self) -> int:
         return self._size_nt
 
     @property
-    def size_bytes(self):
+    def size_bytes(self) -> int:
         return self._size_bytes
 
     @property
-    def recordno(self):
+    def recordno(self) -> int:
         return self._recordno
 
     @property
-    def index(self):
+    def index(self) -> ChromosomeIndex:
         return copy.copy(self._index)
 
     def _build_index(
@@ -192,6 +205,14 @@ class ChromosomeData(object):
         )
         progress.remove_task(indexing_track)
 
+    def __eq__(self, other) -> bool:
+        condition = self.record_byte_size == other.record_byte_size
+        condition = condition and self.size_nt == other.size_nt
+        condition = condition and self.size_bytes == other.size_bytes
+        condition = condition and self.recordno == other.recordno
+        condition = condition and self.index == other.index
+        return condition
+
 
 class ChromosomeDict(object):
     """Wraps ChromosomeData instances into a dictionary
@@ -216,6 +237,10 @@ class ChromosomeDict(object):
         return list(self._data.items())
 
     @property
+    def index_bin_size(self) -> int:
+        return self._index_bin_size
+
+    @property
     def sizes_nt(self) -> Dict[bytes, int]:
         return dict([(name, data.size_nt) for name, data in self._data.items()])
 
@@ -236,3 +261,9 @@ class ChromosomeDict(object):
         self._data[chromosome_db["chromosome"][0]] = ChromosomeData(
             chromosome_db, dtype, self._index_bin_size, progress
         )
+
+    def __eq__(self, other) -> bool:
+        condition = len(self) == len(other)
+        condition = condition and self.items() == other.items()
+        condition = condition and self.index_bin_size == other.index_bin_size
+        return condition

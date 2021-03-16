@@ -13,7 +13,7 @@ import numpy as np  # type: ignore
 import os
 import pickle
 import pandas as pd  # type: ignore
-from typing import Any, Dict, IO, Iterator, List
+from typing import Any, Dict, List
 
 
 class Record(object):
@@ -180,6 +180,14 @@ class DataBase(object):
     def chromosome_recordnos(self) -> Dict[bytes, int]:
         return self._chromosomes.recordnos
 
+    @property
+    def record_byte_size(self) -> int:
+        return self._record_byte_size
+
+    @property
+    def dtype(self) -> Dict[str, str]:
+        return copy.copy(self._dtype)
+
     def log_details(self) -> None:
         """Log database details."""
         logging.info(f"Database name: {self._args.output}")
@@ -202,159 +210,3 @@ class DataBase(object):
         logging.info("[bold]Record details[/bold]")
         logging.info(f"Record size in bytes: {self._record_byte_size}")
         logging.info(f"Dtype: {self._dtype}")
-
-    def __jump_to_bin(self, IH: IO, chromosome: bytes, start_from_nt: int = 0) -> None:
-        """Move buffer pointer to the first record of a bin.
-
-
-        Arguments:
-            IH {IO} -- database input handler
-            chromosome {bytes} -- chromosome label
-
-        Keyword Arguments:
-            start_from_nt {int} -- position in nucleotides (default: {0})
-        """
-        position_in_bytes = self._chromosomes.get_chromosome(chromosome).index[
-            start_from_nt
-        ]
-        IH.seek(position_in_bytes)
-
-    def read_next_record(self, IH: IO) -> bytes:
-        """Read the next record.
-
-        The buffer pointer moves to the start of the following record.
-
-        Arguments:
-            IH {IO} -- database input handle
-
-        Returns:
-            bytes -- record bytes
-        """
-        return IH.read(self._record_byte_size)
-
-    def read_previous_record(self, IH: IO) -> bytes:
-        """Read the previous record.
-
-        The buffer pointer does not move.
-
-        Arguments:
-            IH {IO} -- database input handle
-
-        Returns:
-            bytes -- record bytes
-        """
-        self.rewind(IH)
-        return self.read_next_record(IH)
-
-    def read_next_record_and_rewind(self, IH: IO) -> bytes:
-        """Reads the next record.
-
-        The buffer pointer does not move.
-
-        Arguments:
-            IH {IO} -- database input handle
-
-        Returns:
-            bytes -- record bytes
-        """
-        record = self.read_next_record(IH)
-        self.rewind(IH)
-        return record
-
-    def next_record_exists(self, IH: IO) -> bool:
-        """Tries reading the next record.
-
-
-
-        Arguments:
-            IH {IO} -- database input handle
-
-        Returns:
-            bool -- whether next record exists
-        """
-        if 0 == len(self.read_next_record_and_rewind(IH)):
-            return False
-        return True
-
-    def rewind(self, IH: IO) -> None:
-        """Rewind of one record.
-
-        The buffer pointer moves to the beginning of the previous record.
-
-        Arguments:
-            IH {IO} -- database input handle
-        """
-        IH.seek(max(IH.tell() - self._record_byte_size, 0))
-
-    def skip(self, IH: IO) -> None:
-        """Skip one record.
-
-        The buffer pointer moves to the beginning of the following record.
-
-        Arguments:
-            IH {IO} -- database input handle
-        """
-        IH.seek(IH.tell() + self._record_byte_size)
-
-    def fastforward(self, IH: IO, chromosome: bytes, start_from_nt: int) -> None:
-        """Jump to the first record at a given position.
-
-        First the buffer pointer is moved to the beginning of the bin containing the
-        start_from_nt position. Then, records are read an parsed until their start is
-        greater than the start_from_nt value. Finally, the buffer pointer is moved to
-        the beginning of the last parsed record.
-
-        Arguments:
-            IH {IO} -- database input handle
-            chromosome {bytes} -- chromosome label
-            start_from_nt {int} -- position to fastforward to (in nucleotides)
-        """
-        if 0 == start_from_nt:
-            IH.seek(0)
-            return
-        self.__jump_to_bin(IH, chromosome, start_from_nt)
-
-        record_start = 0
-        while record_start < start_from_nt:
-            if self.next_record_exists(IH):
-                record_start = Record(self.read_next_record(IH), self._dtype)["start"]
-            else:
-                logging.warning(
-                    " ".join(
-                        [
-                            "the specified location",
-                            f"({chromosome.decode()}:{start_from_nt})",
-                            "is outside the database.",
-                        ]
-                    )
-                )
-                return
-
-    def buffer(
-        self, chromosome: bytes, start_from_nt: int = 0, end_at_nt: int = -1
-    ) -> Iterator[Record]:
-        """Buffer a chromosome's records.
-
-        Buffer records from a chromosome withing the specified region.
-        To buffer the whole records, specify a [0, -1] region.
-
-        Arguments:
-            chromosome {bytes} -- chromosome label
-
-        Keyword Arguments:
-            start_from_nt {int} -- region starting position (default: {0})
-            end_at_nt {int} -- region end position (default: {-1})
-
-        Yields:
-            Iterator[Record] -- parsed record
-        """
-        assert chromosome in self._chromosomes.keys()
-        with open(os.path.join(self._root, f"{chromosome.decode()}.bin"), "rb") as IH:
-            self.fastforward(IH, chromosome, start_from_nt)
-            record = self.read_next_record(IH)
-            while 0 != len(record):
-                parsed_record = Record(record, self._dtype)
-                if parsed_record["start"] > end_at_nt and end_at_nt > 0:
-                    break
-                yield parsed_record
-                record = self.read_next_record(IH)

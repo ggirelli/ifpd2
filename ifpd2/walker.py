@@ -20,6 +20,7 @@ from ifpd2.logging import add_log_file_handler
 from ifpd2.database import DataBase
 from ifpd2.oligo import OligoGroup
 from ifpd2.probe import OligoProbeBuilder
+from ifpd2.walker2 import ChromosomeWalker
 
 
 class GenomicWindowSet(object):
@@ -478,7 +479,9 @@ class Walker(GenomicWindowSet):
         self.rw = 0  # Walk step counter
 
         DBHpb = tqdm(
-            self.__db.buffer(self.C.encode(), start_from_nt, end_at_nt),
+            ChromosomeWalker(self.__db, self.C.encode()).buffer(
+                start_from_nt, end_at_nt
+            ),
             total=self.__db.chromosome_recordnos[self.C.encode()],
             desc="Parsing records",
             leave=False,
