@@ -199,7 +199,7 @@ class ChromosomeData(object):
         """
         assert index_bin_size > 0
         indexing_track = progress.add_task(
-            f"indexing {self._name}.bin",
+            f"indexing {self._name.decode()}.bin",
             total=chromosome_db.shape[0],
             transient=True,
         )
