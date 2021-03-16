@@ -23,7 +23,8 @@ classifiers = [
 ]
 include = [
 	"CHANGELOG.md",
-	"LICENSE"
+	"LICENSE",
+    "test_data"
 ]
 
 [tool.poetry.dependencies]
