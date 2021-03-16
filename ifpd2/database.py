@@ -172,9 +172,9 @@ class DataBase(object):
     def chromosome_sizes_nt(self) -> Dict[bytes, int]:
         return self._chromosomes.sizes_nt
 
-    @property
-    def chromosome_sizes_bytes(self) -> Dict[bytes, int]:
-        return self._chromosomes.sizes_bytes
+    # @property
+    # def chromosome_sizes_bytes(self) -> Dict[bytes, int]:
+    #     return self._chromosomes.sizes_bytes
 
     @property
     def chromosome_recordnos(self) -> Dict[bytes, int]:

@@ -55,16 +55,16 @@ class ChromosomeWalker(object):
         """
         return self.__IH.read(self.__db.record_byte_size)
 
-    def read_previous_record(self) -> bytes:
-        """Read the previous record.
+    # def read_previous_record(self) -> bytes:
+    #     """Read the previous record.
 
-        The buffer pointer does not move.
+    #     The buffer pointer does not move.
 
-        Returns:
-            bytes -- record bytes
-        """
-        self.rewind()
-        return self.read_next_record()
+    #     Returns:
+    #         bytes -- record bytes
+    #     """
+    #     self.rewind()
+    #     return self.read_next_record()
 
     def read_next_record_and_rewind(self) -> bytes:
         """Reads the next record.
@@ -95,12 +95,12 @@ class ChromosomeWalker(object):
         """
         self.__IH.seek(max(self.__IH.tell() - self.__db.record_byte_size, 0))
 
-    def skip(self) -> None:
-        """Skip one record.
+    # def skip(self) -> None:
+    #     """Skip one record.
 
-        The buffer pointer moves to the beginning of the following record.
-        """
-        self.__IH.seek(self.__IH.tell() + self.__db.record_byte_size)
+    #     The buffer pointer moves to the beginning of the following record.
+    #     """
+    #     self.__IH.seek(self.__IH.tell() + self.__db.record_byte_size)
 
     def fastforward(self, start_from_nt: int) -> None:
         """Jump to the first record at a given position.

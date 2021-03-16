@@ -123,9 +123,9 @@ class GenomicRegion(object):
     def focus(self) -> Tuple[int, int]:
         return (self.__focusStart, self.__focusEnd)
 
-    @property
-    def focus_step(self) -> int:
-        return self.__focusStep
+    # @property
+    # def focus_step(self) -> int:
+    #     return self.__focusStep
 
     def can_increase_focus(self) -> bool:
         """Check if the focus region can grow more
