@@ -131,7 +131,7 @@ class ChromosomeIndex(object):
 class ChromosomeData(object):
     """Contains information on a chromosome"""
 
-    _name: str
+    _name: bytes
     _size_nt: int
     _size_bytes: int
     _recordno: int
@@ -160,6 +160,10 @@ class ChromosomeData(object):
         self._size_bytes = chromosome_db.shape[0] * self._record_byte_size
 
         self._build_index(chromosome_db, index_bin_size, progress)
+
+    @property
+    def name(self) -> bytes:
+        return self._name
 
     @property
     def record_byte_size(self) -> int:

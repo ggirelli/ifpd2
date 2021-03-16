@@ -6,7 +6,7 @@
 import argparse
 import copy
 from ifpd2 import const
-from ifpd2.chromosome import ChromosomeDict
+from ifpd2.chromosome import ChromosomeData, ChromosomeDict
 from ifpd2.io import get_dtype_length
 import logging
 import numpy as np  # type: ignore
@@ -187,6 +187,9 @@ class DataBase(object):
     @property
     def dtype(self) -> Dict[str, str]:
         return copy.copy(self._dtype)
+
+    def get_chromosome(self, chromosome: bytes) -> ChromosomeData:
+        return self._chromosomes.get_chromosome(chromosome)
 
     def log_details(self) -> None:
         """Log database details."""

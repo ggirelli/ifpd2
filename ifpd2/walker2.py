@@ -158,7 +158,7 @@ class ChromosomeWalker(object):
             yield parsed_record
             record = self.read_next_record()
 
-    def walk_region(self, region: GenomicRegion) -> Iterator[List[Record]]:
+    def walk_single_region(self, region: GenomicRegion) -> Iterator[List[Record]]:
         assert region.chromosome == self.__chromosome
         focus_start, focus_end = region.focus
         record_list = [r for r in self.buffer(focus_start, focus_end)]
@@ -177,3 +177,19 @@ class ChromosomeWalker(object):
             )
             yield record_list
             focus_start, focus_end = region.focus
+
+    def walk_multiple_regions(self, region_set_list: List[List[GenomicRegion]]) -> None:
+        for region_set_idx in range(len(region_set_list)):
+            region_set = region_set_list[region_set_idx]
+            for region_idx in range(len(region_set)):
+                region = region_set[region_idx]
+                for record_set in self.walk_single_region(region):
+                    logging.info(
+                        " ".join(
+                            [
+                                f"Window {region_set_idx}.{region_idx}",
+                                f"({region.focus}):",
+                                f"read {len(record_set)} records",
+                            ]
+                        )
+                    )

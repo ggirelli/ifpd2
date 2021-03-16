@@ -3,8 +3,9 @@
 @contact: gigi.ga90@gmail.com
 """
 
+from ifpd2.chromosome import ChromosomeData
 import logging
-from typing import Tuple
+from typing import List, Tuple
 
 
 class GenomicRegion(object):
@@ -20,15 +21,12 @@ class GenomicRegion(object):
 
     def __init__(
         self,
-        chrom: bytes,
-        chromStart: int,
-        chromEnd: int,
-        focus: float = 1,
-        focus_step: float = 1,
+        chrom_region: Tuple[bytes, int, int],
+        focus_style: Tuple[float, float] = (1, 1),
     ):
         super(GenomicRegion, self).__init__()
-        self.__init_region(chrom, chromStart, chromEnd)
-        self.__init_focus(focus, focus_step)
+        self.__init_region(*chrom_region)
+        self.__init_focus(*focus_style)
 
     def __init_region(self, chrom: bytes, chromStart: int, chromEnd: int) -> None:
         assert 0 != len(chrom), "chromosome cannot be empty"
@@ -94,3 +92,64 @@ class GenomicRegion(object):
             self.__chromStart, self.__focusStart - self.__focusStep // 2
         )
         self.__focusEnd = min(self.__chromEnd, self.__focusEnd + self.__focusStep // 2)
+
+
+class GenomicRegionBuilder(object):
+    """docstring for GenomicRegionBuilder"""
+
+    __chromosome: bytes
+    __chromosome_size_nt: int
+    __focus_style: Tuple[float, float]
+
+    def __init__(
+        self, chromosome_data: ChromosomeData, focus: float = 1, focus_step: float = 1
+    ):
+        super(GenomicRegionBuilder, self).__init__()
+        self.__chromosome = chromosome_data.name
+        self.__chromosome_size_nt = chromosome_data.size_nt
+        assert focus > 0
+        assert focus_step > 0
+        self.__focus_style = (focus, focus_step)
+
+    def __build_overlapping(self, size: int, step: int) -> List[List[GenomicRegion]]:
+        assert step < size
+        region_set_list: List[List[GenomicRegion]] = []
+        for range_start in range(0, size, step):
+            genomic_region_set: List[GenomicRegion] = []
+            for start in range(range_start, self.__chromosome_size_nt, step):
+                end = start + size
+                if end < self.__chromosome_size_nt:
+                    genomic_region_set.append(
+                        GenomicRegion(
+                            (self.__chromosome, start, end), self.__focus_style
+                        )
+                    )
+            region_set_list.append(genomic_region_set)
+        return region_set_list
+
+    def __build_non_overlapping(
+        self, size: int, step: int
+    ) -> List[List[GenomicRegion]]:
+        assert step == size
+        genomic_region_set: List[GenomicRegion] = []
+        for start in range(0, self.__chromosome_size_nt, step):
+            end = start + size
+            if end <= self.__chromosome_size_nt:
+                genomic_region_set.append(
+                    GenomicRegion((self.__chromosome, start, end), self.__focus_style)
+                )
+        return [genomic_region_set]
+
+    def build_by_number(self, n: int) -> List[List[GenomicRegion]]:
+        step: int = self.__chromosome_size_nt // n
+        return self.build_by_size(step, step)
+
+    def build_by_size(self, size: int, step_style: float) -> List[List[GenomicRegion]]:
+        if step_style > 1:
+            step = int(step_style)
+        else:
+            step = int(size * step_style)
+        if step < size:
+            return self.__build_overlapping(size, step)
+        else:
+            return self.__build_non_overlapping(size, step)
