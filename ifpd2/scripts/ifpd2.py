@@ -37,6 +37,7 @@ Another iFISH probe design pipeline (II).
 
     scripts.db.init_parser(subparsers)
     scripts.query.init_parser(subparsers)
+    scripts.query2.init_parser(subparsers)
 
     args = parser.parse_args()
     args = args.parse(args)

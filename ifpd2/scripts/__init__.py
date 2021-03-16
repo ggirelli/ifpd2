@@ -6,7 +6,7 @@
 from ifpd2.scripts import arguments, ifpd2
 from ifpd2.scripts import db, db_check, db_dump, db_info
 from ifpd2.scripts import db_make, db_merge, db_reindex
-from ifpd2.scripts import query
+from ifpd2.scripts import query, query2
 
 import logging
 from rich.logging import RichHandler  # type: ignore
@@ -28,4 +28,5 @@ __all__ = [
     "db_merge",
     "db_reindex",
     "query",
+    "query2",
 ]
