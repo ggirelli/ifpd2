@@ -19,4 +19,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [1.0.0-alpha] - 2021-02-26
 
-[1.0.0-alpha] https://github.com/ggirelli/ifpd/releases/tag/v1.0.0-alpha  
+[1.0.0-alpha] https://github.com/ggirelli/ifpd2/releases/tag/v1.0.0-alpha  
