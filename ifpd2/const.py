@@ -3,8 +3,6 @@
 @contact: gigi.ga90@gmail.com
 """
 
-__version__ = "1.0.0-alpha"
-
 dtype_melting = dict(
     [
         ("name", "|S"),
