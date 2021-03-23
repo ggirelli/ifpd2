@@ -16,7 +16,6 @@ classifiers = [
 	"License :: OSI Approved :: MIT License",
     "Operating System :: Unix",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Typing :: Typed",
@@ -28,7 +27,7 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.7.1"
+python = "^3.8"
 numpy = "^1.20.1"
 pandas = "^1.2.2"
 rich = "^9.10.0"
