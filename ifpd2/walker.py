@@ -274,8 +274,7 @@ class Walker(GenomicWindowSet):
     @threads.setter
     def threads(self, threads):
         ass.ert_type(threads, int, threads)
-        threads = max(1, threads)
-        threads = min(mp.cpu_count(), threads)
+        threads = max(1, min(threads, mp.cpu_count()))
         self._threads = threads
 
     @property
@@ -465,7 +464,7 @@ class Walker(GenomicWindowSet):
     def __start_walk(
         self, *args, start_from_nt: int = 0, end_at_nt: int = -1, **kwargs
     ):
-        self.pool = mp.Pool(np.min([self.threads, mp.cpu_count()]))
+        self.pool = mp.Pool(max(1, min(self.threads, mp.cpu_count())))
         self.logger.info(f"Prepared a pool of {self.threads} threads.")
 
         self._preprocess_window()
