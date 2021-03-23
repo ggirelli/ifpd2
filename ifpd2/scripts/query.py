@@ -48,8 +48,7 @@ def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPars
         "-X",
         metavar="probes",
         type=int,
-        default=1,
-        help="""Number of probes to query for. Default: 1.""",
+        help="""Number of probes to query for.""",
     )
     query.add_argument(
         "-N",

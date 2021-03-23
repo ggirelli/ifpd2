@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - New database format.
 - `dbchk` entry point changed to `db check`.
 - Dropped sequence length column, as it can be inferred from the end/start columns.
+- Removed `-X` default from `query`.
 
 ## [1.0.0-alpha] - 2021-02-26
 
