@@ -4,7 +4,7 @@
 """
 
 import argparse
-from ifpd2.const import __version__
+from ifpd2 import __version__
 from ifpd2.scripts import arguments as ap
 from ifpd2 import scripts
 import sys
@@ -35,8 +35,9 @@ Another iFISH probe design pipeline (II).
         help="Access the help page for a sub-command with: sub-command -h",
     )
 
-    scripts.dbchk.init_parser(subparsers)
+    scripts.db.init_parser(subparsers)
     scripts.query.init_parser(subparsers)
+    scripts.query2.init_parser(subparsers)
 
     args = parser.parse_args()
     args = args.parse(args)

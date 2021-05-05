@@ -5,10 +5,10 @@
 
 import argparse
 from ifpd2.asserts import enable_rich_assert
-from ifpd2.walker import Walker
+from ifpd2.database import DataBase
+from ifpd2.region import GenomicRegionBuilder
+from ifpd2.walker2 import ChromosomeWalker
 from ifpd2.logging import add_log_file_handler
-from ifpd2.probe import OligoProbeBuilder
-from ifpd2.probe_set import OligoProbeSetBuilder
 import logging
 import os
 
@@ -48,7 +48,8 @@ def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPars
         "-X",
         metavar="probes",
         type=int,
-        help="""Number of probes to query for.""",
+        default=None,
+        help="""Number of probes to query for. Default: 1.""",
     )
     query.add_argument(
         "-N",
@@ -219,24 +220,22 @@ def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
         args.region = [0, -1]
     else:
         assert args.region[1] > args.region[0]
-    if args.region[1] <= 0:
-        args.X = None
-        logging.info(
-            " ".join(
-                [
-                    "Cannot design a specific number of probes for queries on",
-                    "a whole chromosome/feature.",
-                ]
-            )
-        )
 
     args.R = int(args.R) if args.R > 1 else float(args.R)
     args.r = int(args.r) if args.r > 1 else float(args.r)
 
     if args.single:
         args.X = 1
-        args.w = 1.0
+        args.w = None
         args.W = None
+
+    assert args.X is not None or args.W is not None
+    if args.X is not None and args.W is not None:
+        logging.warning("cannot combine -X and -W. Using -X.")
+        args.W = None
+        args.w = None
+    if args.W is not None and args.w is None:
+        args.w = 1
 
     assert_reusable(args)
 
@@ -245,49 +244,22 @@ def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
 
 @enable_rich_assert
 def run(args: argparse.Namespace) -> None:
-
     if not os.path.isdir(args.O):
         os.mkdir(args.O)
     add_log_file_handler("{0}/{1}.log".format(args.O, "ifpd2-main"))
 
-    opb = OligoProbeBuilder()
-    opb.N = args.N
-    opb.D = args.D
-    opb.Tr = args.t
-    opb.Ps = args.P
-    opb.Ph = args.H
-    opb.Po = args.I
-    opb.k = args.k
-    opb.F = args.F
-    opb.Gs = args.G
-    opb.Ot = args.o
+    DB = DataBase(args.database)
 
-    opsb = OligoProbeSetBuilder(os.path.join(args.O, "probe_sets"))
-    logging.info(opb.get_prologue())
+    RB = GenomicRegionBuilder(DB.get_chromosome(args.chrom.encode()))
+    if args.X is not None:
+        region_set_list = RB.build_by_number(args.X)
+    else:
+        region_set_list = RB.build_by_size(args.W, args.w)
 
-    ow = Walker(args.database)
-    ow.C = args.chrom
-    ow.S = args.region[0]
-    ow.E = args.region[1] if args.region[1] >= 0 else 0
-    ow.X = args.X
-    ow.Ws = args.W
-    ow.Wh = args.w
-    ow.Rs = args.R
-    ow.Rt = args.r
-    ow.out_path = args.O
-    ow.reuse = args.reuse
-    ow.threads = args.threads
+    walker = ChromosomeWalker(DB, args.chrom.encode())
+    walker.walk_multiple_regions(region_set_list)
 
-    ow.start(
-        start_from_nt=args.region[0],
-        end_at_nt=args.region[1],
-        N=args.N,
-        opb=opb,
-        cfr_step=ow.Rt,
-    )
-
-    opsb.build(ow.walk_results)
-    opsb.export()
+    # print((DB, RB, walker, region_set_list))
 
     logging.info("Done. :thumbs_up: :smiley:")
     logging.shutdown()

@@ -4,6 +4,7 @@
 """
 
 import logging
+import numpy as np  # type: ignore
 import sys
 from typing import Callable
 
@@ -35,6 +36,25 @@ def ert_inInterv(x, vmin, vmax, label, leftClose=False, rightClose=True):
             assert x > vmin and x <= vmax, f"expected {vmin}<{label}<={vmax}"
         else:
             assert x > vmin and x < vmax, f"expected {vmin}<{label}<{vmax}"
+
+
+def ert_in_dtype(x, dtype):
+    if dtype.startswith("f"):
+        assert x <= np.finfo(dtype).max, " ".join(
+            [
+                "expected to be lower than {dtype} max:",
+                f"{x} < {np.finfo(dtype).max}",
+            ]
+        )
+    elif dtype.startswith("u") or dtype.startswith("i"):
+        assert x <= np.iinfo(dtype).max, " ".join(
+            [
+                "expected to be lower than {dtype} max:",
+                f"{x} < {np.iinfo(dtype).max}",
+            ]
+        )
+    else:
+        logging.warning(f"assert not implemented for dtype '{dtype}'")
 
 
 def enable_rich_assert(fun: Callable) -> Callable:

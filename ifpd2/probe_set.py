@@ -165,11 +165,12 @@ class OligoProbeSet(object):
                         "".join(
                             [
                                 f">probe_{pi}:{oligo['name']}",
-                                f":{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n",
+                                f":{oligo['chromosome']}:",
+                                f"{oligo['start']}-{oligo['end']}\n",
                             ]
                         )
                     )
-                    BH.write(f"{probe.data.iloc[i]['seq']}\n")
+                    BH.write(f"{probe.data.iloc[i]['sequence']}\n")
 
 
 class OligoProbeSetBuilder(object):
@@ -206,9 +207,15 @@ class OligoProbeSetBuilder(object):
     def build(self, probe_candidates):
         for (wSet, window_list) in probe_candidates.items():
             window_list = list(window_list.values())
-            i = 0
-            while 0 == len(window_list[i]):
-                i += 1
+
+            non_empty_ids = [
+                i for i in range(len(window_list)) if 0 != len(window_list[i])
+            ]
+            if 0 == len(non_empty_ids):
+                logging.warning(f"No probe candidates found, dropped. [ws{wSet+1}]")
+                continue
+            else:
+                i = non_empty_ids[0]
 
             probe_set_list = self.__build_probe_set_list(window_list, i)
 

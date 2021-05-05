@@ -135,9 +135,12 @@ class OligoGroup(object):
     def __init__(self, oligos, logger=logging.getLogger()):
         super(OligoGroup, self).__init__()
         self.logger = logger
-        self._data = pd.concat([o.data for o in oligos], ignore_index=True)
+        self._data = pd.concat(
+            [o.to_dataframe() for o in oligos if np.isfinite(o["score"])],
+            ignore_index=True,
+        )
         self._data = self._data.loc[self._data["score"] <= 1, :]
-        self._oligos_passing_score_filter = self._data["score"].values <= 1
+        self._oligos_passing_score_filter = self._data.shape[0]
 
     @property
     def data(self):
@@ -341,7 +344,7 @@ class OligoGroup(object):
                 self.logger.info("Not enough oligos, skipped discard step.")
                 return False
             start = passing_oData["start"].values[0]
-            start += len(passing_oData["seq"].values[0]) + D
+            start += len(passing_oData["sequence"].values[0]) + D
             c += 1
 
         c = 1
@@ -351,18 +354,21 @@ class OligoGroup(object):
                 self.logger.info("Not enough oligos, skipped discard step.")
                 return False
             end = passing_oData["end"].values[-1]
-            end -= len(passing_oData["seq"].values[-1]) - D
+            end -= len(passing_oData["sequence"].values[-1]) - D
             c += 1
 
         return True
 
     def discard_focused_oligos_safeN(self, safeN, D):
         # Discard focused oligos that are neither the first nor the last safeN
-
         start = self.data.loc[self.oligos_in_focus_window, "start"].values[0]
-        start += len(self.data.loc[self.oligos_in_focus_window, "seq"].values[0]) + D
+        start += (
+            len(self.data.loc[self.oligos_in_focus_window, "sequence"].values[0]) + D
+        )
         end = self.data.loc[self.oligos_in_focus_window, "end"].values[-1]
-        end += len(self.data.loc[self.oligos_in_focus_window, "seq"].values[-1]) + D
+        end += (
+            len(self.data.loc[self.oligos_in_focus_window, "sequence"].values[-1]) + D
+        )
 
         if not self.__check_oligos_to_discard_safeN(safeN, start, end, D):
             return
