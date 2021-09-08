@@ -33,4 +33,3 @@ def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
 @enable_rich_assert
 def run(args: argparse.Namespace) -> None:
     raise NotImplementedError
-    logging.info("Done. :thumbs_up: :smiley:")

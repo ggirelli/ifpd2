@@ -33,7 +33,7 @@ class ChromosomeIndex(object):
         """
         self._index = {}
         chrom_size_nt = chrom_db["end"].values.max()
-        for bin_id in range(0, (chrom_size_nt // self._bin_size) + 1):
+        for bin_id in range((chrom_size_nt // self._bin_size) + 1):
             self._index[bin_id] = (np.inf, 0)
 
     @property
@@ -70,10 +70,8 @@ class ChromosomeIndex(object):
             binned_to = position_in_nt // self._bin_size
 
             bin_start, bin_end = list(self._index[binned_to])
-            if bin_start > position_in_bytes:
-                bin_start = position_in_bytes
-            if bin_end < position_in_bytes:
-                bin_end = position_in_bytes
+            bin_start = min(bin_start, position_in_bytes)
+            bin_end = max(bin_end, position_in_bytes)
             self._index[binned_to] = (bin_start, bin_end)
 
     def __fill_empty_bins(self) -> None:

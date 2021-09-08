@@ -14,7 +14,7 @@ def ert_type(x, stype, label):
 
 
 def ert_multiTypes(x, types, label):
-    cond = any([isinstance(x, t) for t in types])
+    cond = any(isinstance(x, t) for t in types)
     assert cond, f"{label} should be one of {types}, {type(x)} instead"
 
 
@@ -31,11 +31,10 @@ def ert_inInterv(x, vmin, vmax, label, leftClose=False, rightClose=True):
             assert x >= vmin and x <= vmax, f"expected {vmin}<={label}<={vmax}"
         else:
             assert x >= vmin and x < vmax, f"expected {vmin}<={label}<{vmax}"
+    elif rightClose:
+        assert x > vmin and x <= vmax, f"expected {vmin}<{label}<={vmax}"
     else:
-        if rightClose:
-            assert x > vmin and x <= vmax, f"expected {vmin}<{label}<={vmax}"
-        else:
-            assert x > vmin and x < vmax, f"expected {vmin}<{label}<{vmax}"
+        assert x > vmin and x < vmax, f"expected {vmin}<{label}<{vmax}"
 
 
 def ert_in_dtype(x, dtype):

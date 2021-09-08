@@ -22,7 +22,7 @@ def get_dtype_length(dtype: Dict[str, str]) -> int:
     Returns:
         int -- length of record in bytes
     """
-    return sum([int(label.strip("><|SUuif")) for label in dtype.values()])
+    return sum(int(label.strip("><|SUuif")) for label in dtype.values())
 
 
 def parse_hush(path: str) -> pd.DataFrame:
@@ -81,7 +81,7 @@ def parse_melting(path: str, sep: str = "\t", header: bool = True) -> pd.DataFra
     expected_columns.pop("name", None)
     expected_columns[
         "sequence"
-    ] = f'|S{max(set([len(seq) for seq in melting_df["sequence"].values]))}'
+    ] = f'|S{max({len(seq) for seq in melting_df["sequence"].values})}'
     return melting_df.astype(expected_columns)
 
 

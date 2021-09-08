@@ -64,7 +64,7 @@ class Record(object):
 
     @staticmethod
     def __norm_value_in_range(v, r):
-        if 0 == r[1]:
+        if r[1] == 0:
             return np.nan
         return (v - r[0]) / (r[1] - r[0])
 
@@ -103,7 +103,7 @@ class Record(object):
         norm_nOT = self.__update_score_by_nOT(F)
         if norm_nOT is None:
             return
-        if all([x >= 0 for x in Gs]):
+        if all(x >= 0 for x in Gs):
             norm_ss_dG = self.__update_score_by_dG_Tm(Gs)
         else:
             norm_ss_dG = self.__update_score_by_dG_Gs(Gs)
@@ -112,8 +112,7 @@ class Record(object):
         self._data["score"] = np.mean([norm_nOT, norm_ss_dG])
 
     def __getitem__(self, key: str) -> Any:
-        allowed_columns = ["score"]
-        allowed_columns.extend(const.database_columns)
+        allowed_columns = ['score', *const.database_columns]
         if key not in allowed_columns:
             raise KeyError(f"unrecognized key '{key}'")
         else:
@@ -205,7 +204,7 @@ class DataBase(object):
         logging.info(f"Expecting {len(self._chromosomes)} chromosomes.")
         logging.info("Chromosomes:")
         for chromosome, data in self._chromosomes.items():
-            empty_label = "".join([" " for c in chromosome.decode()])
+            empty_label = "".join(" " for c in chromosome.decode())
             logging.info(f"\t{chromosome.decode()} => size : {data.size_nt} (nt)")
             logging.info(f"\t{chromosome.decode()} => size : {data.size_bytes} (bytes)")
             logging.info(f"\t{empty_label} => recordno : {data.recordno}")

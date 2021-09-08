@@ -163,7 +163,7 @@ def populate_db(
 def reduce_sequence_columns(df: pd.DataFrame) -> pd.DataFrame:
     logging.info("discarding redundant sequence columns")
     seq_columns = [c for c in df.columns if "sequence" in c]
-    if 1 == len(seq_columns):
+    if len(seq_columns) == 1:
         return df
     df.drop(seq_columns[1:], axis=1, inplace=True)
     df.rename(columns=dict([(seq_columns[0], "sequence")]), inplace=True)
@@ -293,14 +293,14 @@ def run(args: argparse.Namespace) -> None:
     dbdf, dtype_sequence = parse_sequences(dbdf)
     dbdf, dtype_header = parse_record_headers(dbdf, args.prefix)
 
-    dtype = dict()
+    dtype = {}
     dtype.update(const.dtype_melting)
     dtype.update(const.dtype_hush)
     dtype.update(const.dtype_secondary)
     dtype.update(dtype_sequence)
     dtype.update(dtype_header)
 
-    for column in dtype.keys():
+    for column in dtype:
         if column not in dbdf.columns:
             dbdf["column"] = np.repeat(np.nan, dbdf.shape[0])
     dbdf = dbdf.loc[:, const.database_columns]
