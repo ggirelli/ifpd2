@@ -268,7 +268,7 @@ def run(args: argparse.Namespace) -> None:
     ow = Walker(args.database)
     ow.C = args.chrom
     ow.S = args.region[0]
-    ow.E = args.region[1] if args.region[1] >= 0 else 0
+    ow.E = max(args.region[1], 0)
     ow.X = args.X
     ow.Ws = args.W
     ow.Wh = args.w

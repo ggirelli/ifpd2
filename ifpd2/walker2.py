@@ -20,10 +20,7 @@ class ChromosomeWalker(object):
 
     def __init__(self, db: Union[DataBase, str], chromosome: bytes):
         super(ChromosomeWalker, self).__init__()
-        if isinstance(db, str):
-            self.__db = DataBase(db)
-        else:
-            self.__db = db
+        self.__db = DataBase(db) if isinstance(db, str) else db
         assert chromosome in self.__db._chromosomes.keys()
         self.__IH = open(
             os.path.join(self.__db._root, f"{chromosome.decode()}.bin"), "rb"
@@ -84,9 +81,7 @@ class ChromosomeWalker(object):
         Returns:
             bool -- whether next record exists
         """
-        if 0 == len(self.read_next_record_and_rewind()):
-            return False
-        return True
+        return len(self.read_next_record_and_rewind()) != 0
 
     def rewind(self) -> None:
         """Rewind of one record.
@@ -115,7 +110,7 @@ class ChromosomeWalker(object):
             chromosome {bytes} -- chromosome label
             start_from_nt {int} -- position to fastforward to (in nucleotides)
         """
-        if 0 == start_from_nt:
+        if start_from_nt == 0:
             self.__IH.seek(0)
             return
         self.__jump_to_bin(start_from_nt)
@@ -151,7 +146,7 @@ class ChromosomeWalker(object):
         """
         self.fastforward(start_from_nt)
         record = self.read_next_record()
-        while 0 != len(record):
+        while len(record) != 0:
             parsed_record = Record(record, self.__db.dtype)
             if parsed_record["start"] > end_at_nt and end_at_nt > 0:
                 break

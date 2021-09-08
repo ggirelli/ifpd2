@@ -243,10 +243,7 @@ class GenomicRegionBuilder(object):
         Returns:
             List[List[GenomicRegion]] -- generated region lists
         """
-        if step_style > 1:
-            step = int(step_style)
-        else:
-            step = int(size * step_style)
+        step = int(step_style) if step_style > 1 else int(size * step_style)
         if step < size:
             return self.__build_overlapping(size, step)
         else:
