@@ -6,7 +6,6 @@
 import argparse
 from ifpd2.asserts import enable_rich_assert
 from ifpd2.scripts import arguments as ap
-import logging
 
 
 def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:

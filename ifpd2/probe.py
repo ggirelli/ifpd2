@@ -174,7 +174,6 @@ class OligoPathBuilder(object):
             if i in path_start_set or len(A[i, i + 1].nonzero()[0]) != 0
         ]
 
-
         for i in idxs:
             path = [i]
             k = i
@@ -206,10 +205,13 @@ class OligoPathBuilder(object):
         start_positions = oData["start"].values
         end_positions = oData["end"].values
 
-        edges = [np.logical_or(
-                    end_positions + D < oData["start"].values[i],
-                    start_positions - D >= oData["end"].values[i],
-                ) for i in range(oData.shape[0])]
+        edges = [
+            np.logical_or(
+                end_positions + D < oData["start"].values[i],
+                start_positions - D >= oData["end"].values[i],
+            )
+            for i in range(oData.shape[0])
+        ]
         return OligoPathBuilder.get_paths(np.vstack(edges).astype("i"))
 
     def __size_paths(self, path_set, exit_polls):

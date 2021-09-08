@@ -140,7 +140,6 @@ class GenomicWindowSet(object):
                 else np.floor((self.E - self.S) / (self.X + 1)).astype("i")
             )
 
-
         self._w = 0  # Window ID
         self._reached_last_window = False
 

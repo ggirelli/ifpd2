@@ -112,7 +112,7 @@ class Record(object):
         self._data["score"] = np.mean([norm_nOT, norm_ss_dG])
 
     def __getitem__(self, key: str) -> Any:
-        allowed_columns = ['score', *const.database_columns]
+        allowed_columns = ["score", *const.database_columns]
         if key not in allowed_columns:
             raise KeyError(f"unrecognized key '{key}'")
         else:

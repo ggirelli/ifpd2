@@ -16,7 +16,7 @@ class ChromosomeIndex(object):
     """ChromosomeIndex"""
 
     _bin_size: int
-    _index: Dict[int, Tuple[int, int]]
+    _index: Dict[int, Tuple[float, float]]
 
     def __init__(self, bin_size: int):
         super(ChromosomeIndex, self).__init__()
@@ -41,7 +41,7 @@ class ChromosomeIndex(object):
         return self._bin_size
 
     @property
-    def data(self) -> Dict[int, Tuple[int, int]]:
+    def data(self) -> Dict[int, Tuple[float, float]]:
         return copy.copy(self._index)
 
     def __populate_bins(
@@ -115,7 +115,7 @@ class ChromosomeIndex(object):
         if binned_to not in self._index:
             return -1
 
-        position_in_bytes = self._index[binned_to][0]
+        position_in_bytes = int(self._index[binned_to][0])
         if not np.isfinite(position_in_bytes):
             return -1
         return position_in_bytes
