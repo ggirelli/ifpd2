@@ -24,7 +24,7 @@ from os.path import basename, normpath, splitext
 def main(input_path: str, output_path: str, kmer_size: int) -> None:
     seqRec = SeqIO.parse(input_path, "fasta")
 
-    oligos_list = list()
+    oligos_list = []
     for record in seqRec:
         record = record
         for i in range(len(record) - kmer_size + 1):
