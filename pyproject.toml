@@ -45,3 +45,4 @@ build-backend = "poetry.masonry.api"
 
 [tool.poetry.scripts]
 "ifpd2" = "ifpd2.scripts.ifpd2:main"
+"ifpd2-autocomplete" = "ifpd2.scripts.autocomplete:main"
