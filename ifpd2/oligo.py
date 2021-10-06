@@ -3,11 +3,13 @@
 @contact: gigi.ga90@gmail.com
 """
 
+from ifpd2 import asserts as ass
+from ifpd2.dataclasses import GCRange
 import logging
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
-
-from ifpd2 import asserts as ass
+from tqdm import tqdm  # type: ignore
+from typing import List, Tuple
 
 
 class Oligo(object):
@@ -389,3 +391,16 @@ class OligoGroup(object):
         self._oligos_passing_score_filter = self._oligos_passing_score_filter[
             keep_condition
         ]
+
+
+def select_by_GC(
+    oligos_list: List[Tuple[str, str]],
+    kmer_size: int,
+    gc_range: GCRange = GCRange(0.35, 0.85),
+) -> List[Tuple[str, str]]:
+    return [
+        (header, sequence)
+        for header, sequence in tqdm(oligos_list, desc="GC check", leave=False)
+        if (sequence.count("C") + sequence.count("G")) / kmer_size >= gc_range.low
+        and (sequence.count("C") + sequence.count("G")) / kmer_size <= gc_range.high
+    ]

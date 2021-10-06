@@ -133,3 +133,14 @@ class FreeEnergyInterval:
 
     def astuple(self) -> Tuple[float, float]:
         return (self.start, self.end)
+
+
+@dataclass(frozen=True)
+class GCRange:
+    low: float
+    high: float
+
+    def __post_init__(self):
+        assert 0 <= self.low <= 1
+        assert 0 <= self.high <= 1
+        assert self.low <= self.high

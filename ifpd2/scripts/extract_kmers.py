@@ -3,13 +3,14 @@
 @contact: gigi.ga90@gmail.com
 """
 
-from Bio import SeqIO  # type: ignore
-from Bio.Seq import Seq  # type: ignore
-from Bio.SeqRecord import SeqRecord  # type: ignore
+from Bio.Seq import reverse_complement  # type: ignore
 import click  # type: ignore
 from ifpd2.const import CONTEXT_SETTINGS
+from ifpd2.fasta import extract_kmers
+from ifpd2.io import write_oligos
+from ifpd2.oligo import select_by_GC
 import logging
-from os.path import join as path_join
+from os.path import isdir, isfile, join as path_join
 from os.path import basename, normpath, splitext
 
 
@@ -22,45 +23,29 @@ from os.path import basename, normpath, splitext
 @click.argument("output_path", metavar="OUTPUT_DIRECTORY", type=click.Path(exists=True))
 @click.argument("kmer_size", metavar="KMER_LENGTH", type=click.INT)
 def main(input_path: str, output_path: str, kmer_size: int) -> None:
-    seqRec = SeqIO.parse(input_path, "fasta")
+    assert isfile(input_path)
+    assert isdir(output_path)
 
-    oligos_list = []
-    for record in seqRec:
-        record = record
-        for i in range(len(record) - kmer_size + 1):
-            oligos_list.append(
-                SeqRecord(
-                    Seq(str(record.seq)[slice(i, i + kmer_size)]).reverse_complement(),
-                    id=f"{record.id}|{i+1}:{i+kmer_size+1}",
-                    name="",
-                    description="",
-                )
-            )
+    logging.info(f"Input  : {input_path}")
+    logging.info(f"Output : {output_path}")
+    logging.info(f"Length : {kmer_size}")
+
+    oligos_list = extract_kmers(input_path, kmer_size)
     logging.info(f"Extracted {len(oligos_list)} sequences")
 
-    valid_oligos = [
-        oligo
-        for oligo in oligos_list
-        if (oligo.seq.count("C") + oligo.seq.count("G")) / kmer_size >= 0.35
-        and (oligo.seq.count("C") + oligo.seq.count("G")) / kmer_size <= 0.85
-        and "N" not in oligo.seq
-    ]
-
-    print("Sequences with correct GC content:", len(valid_oligos))
+    valid_oligos = select_by_GC(oligos_list, kmer_size)
+    logging.info(f"{len(valid_oligos)} sequences with correct GC content")
 
     base, _ = splitext(basename(input_path))
-    SeqIO.write(
-        valid_oligos,
+    write_oligos(
+        path_join(normpath(output_path), f"{base}.GC35to85_Reference.fa"),
+        (o for o in valid_oligos),
+    )
+    write_oligos(
         path_join(normpath(output_path), f"{base}.GC35to85_RevCompl.fa"),
-        "fasta",
+        ((h, reverse_complement(s)) for h, s in valid_oligos),
+        "writing rc",
     )
 
-    oligos_rc = [
-        oligo.reverse_complement(id=True, name="", description="")
-        for oligo in valid_oligos
-    ]
-    SeqIO.write(
-        oligos_rc,
-        path_join(normpath(output_path), f"{base}.GC35to85_Reference.fa"),
-        "fasta",
-    )
+    logging.info("Done. :thumbs_up: :smiley:")
+    logging.shutdown()
