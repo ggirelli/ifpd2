@@ -105,7 +105,6 @@ def main(
         and len(settings.melting_temperature_paths) != 0
     ), "please provide either --hush or --melting"
 
-
     os.mkdir(settings.output_path)
     dbdf = pd.DataFrame(columns=["name"])
     dbdf.set_index("name", inplace=True)
