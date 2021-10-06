@@ -278,4 +278,6 @@ def write_database(
 
     logging.info("writing db.pickle")
     with open(os.path.join(settings.output_path, "db.pickle"), "wb") as OH:
-        pickle.dump(dict(chromosomes=chromosome_data, dtype=dtype, args=settings), OH)
+        pickle.dump(
+            dict(chromosomes=chromosome_data, dtype=dtype, args=settings.asdict()), OH
+        )

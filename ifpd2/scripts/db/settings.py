@@ -7,7 +7,7 @@ from copy import copy
 from ifpd2.const import DEFAULT_DATABASE_INDEX_BIN_SIZE
 import logging
 from os.path import isdir, isfile
-from typing import List, Set
+from typing import Any, Dict, List, Set
 
 
 class DBMakeSettings(object):
@@ -87,3 +87,13 @@ class DBMakeSettings(object):
         logging.info(f"hush: {self.off_target_paths}")
         logging.info(f"oligo-melting: {self.melting_temperature_paths}")
         logging.info(f"OligoArrayAux: {self.secondary_structure_paths}")
+
+    def asdict(self) -> Dict[str, Any]:
+        return dict(
+            output_path=self.output_path,
+            off_target_paths=self.off_target_paths,
+            melting_temperature_paths=self.melting_temperature_paths,
+            secondary_structure_paths=self.secondary_structure_paths,
+            bin_size=self.bin_size,
+            prefix=self.prefix,
+        )

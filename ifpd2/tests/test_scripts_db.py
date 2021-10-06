@@ -18,6 +18,7 @@ def test_db_make():
             "ifpd2",
             "db",
             "make",
+            "test_db",
             "-O",
             "test_data/test.hush.fa",
             "-T",
@@ -26,7 +27,6 @@ def test_db_make():
             "test_data/test.ss.ct",
             "-p",
             "chr",
-            "test_db",
         ]
     )
     assert b"Error" not in script_output

@@ -126,7 +126,7 @@ class DataBase(object):
     """Buffering and checking class for ifpd2 database."""
 
     _root: str
-    _args: argparse.Namespace
+    _args: Dict[str, Any]
     _chromosomes: ChromosomeDict
     _dtype: Dict[str, str]
     _record_byte_size: int
@@ -192,13 +192,13 @@ class DataBase(object):
 
     def log_details(self) -> None:
         """Log database details."""
-        logging.info(f"Database name: {self._args.output}")
+        logging.info(f"Database name: {self._args['output_path']}")
         logging.info(f"Sequence max length: {self._dtype['sequence'][2:]}")
         logging.info("")
         logging.info("[bold]## Input files[/bold]")
-        logging.info(f"hush files: {self._args.hush}")
-        logging.info(f"oligo-melting files: {self._args.melting}")
-        logging.info(f"OligoArrayAux files: {self._args.secondary}")
+        logging.info(f"hush files: {self._args['off_target_paths']}")
+        logging.info(f"oligo-melting files: {self._args['melting_temperature_paths']}")
+        logging.info(f"OligoArrayAux files: {self._args['secondary_structure_paths']}")
         logging.info("")
         logging.info("[bold]## Chromosome details[/bold]")
         logging.info(f"Expecting {len(self._chromosomes)} chromosomes.")
