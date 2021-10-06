@@ -56,9 +56,7 @@ def check_region(
         ), "cannot use --region-start or --region-end without --chrom"
     elif start is not None:
         chrom_size = DB.chromosome_sizes_nt[chrom.encode()]
-        assert (
-            start < chrom_size
-        ), f"{start} larger than chromosome size: {chrom_size}"
+        assert start < chrom_size, f"{start} larger than chromosome size: {chrom_size}"
         if end is not None:
             assert start < end, "end location smaller than start"
 
