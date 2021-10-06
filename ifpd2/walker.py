@@ -135,9 +135,10 @@ class GenomicWindowSet(object):
         if isinstance(self.X, int):
             self.Ws = (
                 self.E - self.S
-                if 1 == self.X
+                if self.X == 1
                 else np.floor((self.E - self.S) / (self.X + 1)).astype("i")
             )
+
 
         self._w = 0  # Window ID
         self._reached_last_window = False
@@ -157,7 +158,7 @@ class GenomicWindowSet(object):
     def __mk_all_window_sets(self):
         # Prepare all window sets in a region of interest
         window_starts = np.floor(np.arange(self.S, self.E, self.Ws)).astype("i")
-        if 0 != (self.E - self.S) % self.Ws or 1 != len(window_starts):
+        if 0 != (self.E - self.S) % self.Ws or len(window_starts) != 1:
             window_starts = window_starts[:-1]
 
         window_mids = (window_starts + self.Ws / 2).reshape((window_starts.shape[0], 1))
@@ -222,7 +223,7 @@ class GenomicWindowSet(object):
 
         new_window_id = 0
         new_set_id = self.window_sets["s"].max() + 1
-        if 0 != len(non_overlapping_group_ids):
+        if len(non_overlapping_group_ids) != 0:
             new_set_id = gData[non_overlapping_group_ids].min()
             new_window_id = (
                 self.window_sets[self.window_sets["s"] == new_set_id]["w"].max() + 1
@@ -371,56 +372,55 @@ class Walker(GenomicWindowSet):
         #   True to parse in current window
         #   Parsed output to append it
 
-        if oligo_start >= self.current_window["end"]:
-            # DBHpb.clear()
+        if oligo_start < self.current_window["end"]:
+            return (None, "continue")
+        # DBHpb.clear()
 
-            parsed_output = self.__process_window_async(
-                self.current_oligos,
-                self.current_window,
-                self.fprocess,
-                self.fpost,
-                *args,
-                opath=self.window_path,
-                loggerName=self.logger.name,
-                **kwargs,
-            )
+        parsed_output = self.__process_window_async(
+            self.current_oligos,
+            self.current_window,
+            self.fprocess,
+            self.fpost,
+            *args,
+            opath=self.window_path,
+            loggerName=self.logger.name,
+            **kwargs,
+        )
 
-            if self.reached_last_window:
-                self.logger.info("Reached last window")
-                return (None, "break")
+        if self.reached_last_window:
+            self.logger.info("Reached last window")
+            return (None, "break")
 
-            self.go_to_next_window()
-            self._preprocess_window()
-            self._load_windows_until_next_to_do()
-            if self.reached_last_window and self._window_done():
-                self.logger.info("Reached last window and done")
-                return (None, "break")
+        self.go_to_next_window()
+        self._preprocess_window()
+        self._load_windows_until_next_to_do()
+        if self.reached_last_window and self._window_done():
+            self.logger.info("Reached last window and done")
+            return (None, "break")
 
-            if 0 != len(self.current_oligos):
-                self.remove_oligos_starting_before(self.current_window["start"])
+        if len(self.current_oligos) != 0:
+            self.remove_oligos_starting_before(self.current_window["start"])
 
-            return (parsed_output, "append")
-        return (None, "continue")
+        return (parsed_output, "append")
 
     def __parse_line(self, line, oligo_start, oligo_end, DBHpb, args, kwargs):
         if oligo_start >= self.current_window["start"]:
             parsing_output, parsing_status = self.__finished_parsing(
                 line, oligo_start, oligo_end, DBHpb, args, kwargs
             )
-            if parsing_status == "continue":
-                if oligo_end > self.walk_destination:  # End reached
-                    self.logger.info("Reached destination")
-                    return (None, "break")
-
-                oligo = Oligo(line, self.r)
-                self.fparse(oligo, *args, **kwargs)
-
-                if not np.isnan(oligo.score):
-                    self.current_oligos.append(oligo)
-
-                self.rw += 1
-            else:
+            if parsing_status != "continue":
                 return (parsing_output, parsing_status)
+            if oligo_end > self.walk_destination:  # End reached
+                self.logger.info("Reached destination")
+                return (None, "break")
+
+            oligo = Oligo(line, self.r)
+            self.fparse(oligo, *args, **kwargs)
+
+            if not np.isnan(oligo.score):
+                self.current_oligos.append(oligo)
+
+            self.rw += 1
         return (None, "continue")
 
     def __parse_database(self, DBHpb, args, kwargs):
@@ -438,7 +438,7 @@ class Walker(GenomicWindowSet):
                 exec_results.append(parsing_output)
             self.r += 1
 
-        if 0 != len(self.current_oligos):
+        if len(self.current_oligos) != 0:
             exec_results.append(
                 self.__process_window_async(
                     self.current_oligos,
@@ -487,9 +487,8 @@ class Walker(GenomicWindowSet):
     def _window_done(self):
         s = int(self.current_window["s"])
         w = int(self.current_window["w"])
-        if s in self.walk_results.keys():
-            if w in self.walk_results[s].keys():
-                return isinstance(self.walk_results[s][w], list)
+        if s in self.walk_results.keys() and w in self.walk_results[s].keys():
+            return isinstance(self.walk_results[s][w], list)
         return False
 
     def _load_windows_until_next_to_do(self):
@@ -664,7 +663,7 @@ class Walker(GenomicWindowSet):
     def fpost(results, opath, *args, **kwargs):
         assert isinstance(kwargs["opb"], OligoProbeBuilder)
         logger = logging.getLogger(kwargs["loggerName"])
-        if 0 == len(results):
+        if len(results) == 0:
             logger.critical(f"Built {len(results)} oligo probe candidates")
             logger.handlers = logger.handlers[:-1]
         else:

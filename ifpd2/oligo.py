@@ -75,7 +75,7 @@ class Oligo(object):
 
     @staticmethod
     def __norm_value_in_range(v, r):
-        if 0 == r[1]:
+        if r[1] == 0:
             return np.nan
         return (v - r[0]) / (r[1] - r[0])
 
@@ -114,7 +114,7 @@ class Oligo(object):
         norm_nOT = self.__update_score_by_nOT(F)
         if norm_nOT is None:
             return
-        if all([x >= 0 for x in Gs]):
+        if all(x >= 0 for x in Gs):
             norm_ss_dG = self.__update_score_by_dG_Tm(Gs)
         else:
             norm_ss_dG = self.__update_score_by_dG_Gs(Gs)
@@ -185,7 +185,7 @@ class OligoGroup(object):
             return self._data.loc[self.oligos_in_focus_window, :]
 
     def get_n_focused_oligos(self, onlyUsable=False):
-        if 0 == self.usable_oligos.sum():
+        if self.usable_oligos.sum() == 0:
             return 0
         return self.get_focused_oligos(onlyUsable).shape[0]
 
@@ -222,7 +222,7 @@ class OligoGroup(object):
         if n <= self.get_n_focused_oligos():
             return
 
-        for i in range(n - self.get_n_focused_oligos()):
+        for _ in range(n - self.get_n_focused_oligos()):
             if not self.expand_focus_to_closest():
                 return
 
@@ -242,17 +242,19 @@ class OligoGroup(object):
         # Expand the current focus window of a given step (in nt)
         assert 0 < step
 
-        if self.focus_window[0] <= self._data["start"].min():
-            if self.focus_window[1] >= self._data["end"].max():
-                self.logger.warning(
-                    " ".join(
-                        [
-                            "Cannot expand the focus region any further ",
-                            "(all oligos already included)",
-                        ]
-                    )
+        if (
+            self.focus_window[0] <= self._data["start"].min()
+            and self.focus_window[1] >= self._data["end"].max()
+        ):
+            self.logger.warning(
+                " ".join(
+                    [
+                        "Cannot expand the focus region any further ",
+                        "(all oligos already included)",
+                    ]
                 )
-                return False
+            )
+            return False
 
         new_focus_start, new_focus_end = self.focus_window
         new_focus_start -= step / 2
@@ -266,18 +268,10 @@ class OligoGroup(object):
     def __get_focus_extremes(self):
         earl = self._data["start"].values < self.focus_window[0]
         max_start = self._data.loc[earl, "start"].max()
-        if 0 != earl.sum():
-            d_earl = self.focus_window[0] - max_start
-        else:
-            d_earl = np.inf
-
+        d_earl = self.focus_window[0] - max_start if earl.sum() != 0 else np.inf
         late = self._data["end"].values >= self.focus_window[1]
         min_end = self._data.loc[late, "end"].min()
-        if 0 != late.sum():
-            d_late = min_end - self.focus_window[1]
-        else:
-            d_late = np.inf
-
+        d_late = min_end - self.focus_window[1] if late.sum() != 0 else np.inf
         return (max_start, min_end, d_earl, d_late)
 
     def __set_focus_windows_for_inifinite_extreme(self):
@@ -337,7 +331,7 @@ class OligoGroup(object):
         c = 1
         while c <= safeN:
             passing_oData = oData.loc[oData["start"] > start, :]
-            if 0 == passing_oData.shape[0]:
+            if passing_oData.shape[0] == 0:
                 self.logger.info("Not enough oligos, skipped discard step.")
                 return False
             start = passing_oData["start"].values[0]
@@ -347,7 +341,7 @@ class OligoGroup(object):
         c = 1
         while c <= safeN:
             passing_oData = oData.loc[oData["end"] <= end]
-            if 0 == passing_oData.shape[-1]:
+            if passing_oData.shape[-1] == 0:
                 self.logger.info("Not enough oligos, skipped discard step.")
                 return False
             end = passing_oData["end"].values[-1]

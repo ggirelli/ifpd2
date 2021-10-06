@@ -26,10 +26,9 @@ class Database(object):
             return
         with open(chrom_path, "r") as DBH:
             header = next(DBH)
-            if not all([isinstance(s, str) for s in header.split("\t")]):
+            if not all(isinstance(s, str) for s in header.split("\t")):
                 DBH.seek(0)
-            for line in DBH:
-                yield line
+            yield from DBH
 
 
 class DatabaseBinary(Database):
@@ -86,6 +85,6 @@ class DatabaseBinary(Database):
             return
         with open(chrom_path, "rb") as DBH:
             bytepack = DBH.read(self.n_bytes)
-            while 0 != len(bytepack):
+            while len(bytepack) != 0:
                 yield struct.unpack(self.dtype, bytepack)
                 bytepack = DBH.read(self.n_bytes)

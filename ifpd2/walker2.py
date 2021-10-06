@@ -49,11 +49,11 @@ class GenomicWindowSet(object):
         return (self._window_id + 1) == self._window_data.shape[0]
 
     def init_windows_for_n_probes(self, n_probes: int) -> None:
-        if 0 < self._window_data.shape[0]:
+        if self._window_data.shape[0] > 0:
             logging.warning("cannot re-initalize windows.")
             return
 
     def init_windows_by_size(self, size: int, shift: float) -> None:
-        if 0 < self._window_data.shape[0]:
+        if self._window_data.shape[0] > 0:
             logging.warning("cannot re-initalize windows.")
             return

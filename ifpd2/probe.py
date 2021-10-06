@@ -27,7 +27,7 @@ class OligoProbe(object):
     def data(self, oligo_data):
         assert isinstance(oligo_data, pd.DataFrame)
         required_columns = ["start", "end", "Tm"]
-        assert all([col in oligo_data.columns for col in required_columns])
+        assert all(col in oligo_data.columns for col in required_columns)
         self._data = oligo_data
         self._range = (self._data["start"].min(), self._data["end"].max())
         self._size = self._range[1] - self._range[0]
@@ -171,8 +171,9 @@ class OligoPathBuilder(object):
         idxs = [
             i
             for i in range(A.shape[0] - 1)
-            if i in path_start_set or 0 != len(A[i, i + 1].nonzero()[0])
+            if i in path_start_set or len(A[i, i + 1].nonzero()[0]) != 0
         ]
+
 
         for i in idxs:
             path = [i]
@@ -202,18 +203,13 @@ class OligoPathBuilder(object):
         # distance equal to D
         ass.ert_type(oData, pd.DataFrame, "oData")
 
-        edges = []
         start_positions = oData["start"].values
         end_positions = oData["end"].values
 
-        for i in range(oData.shape[0]):
-            edges.append(
-                np.logical_or(
+        edges = [np.logical_or(
                     end_positions + D < oData["start"].values[i],
                     start_positions - D >= oData["end"].values[i],
-                )
-            )
-
+                ) for i in range(oData.shape[0])]
         return OligoPathBuilder.get_paths(np.vstack(edges).astype("i"))
 
     def __size_paths(self, path_set, exit_polls):
@@ -272,7 +268,7 @@ class OligoPathBuilder(object):
         # Converts a list of paths into a list of probes
         ass.ert_type(path_list, list, "path list")
         probe_list = []
-        if 0 != len(path_list):
+        if len(path_list) != 0:
             for path in path_list:
                 probe_list.append(OligoProbeBuilder.path2probe(path, oData))
         return probe_list
@@ -342,17 +338,16 @@ class OligoProbeBuilder(OligoPathBuilder):
             assert self.Gs[1] <= self.Gs[0]
 
         ass.ert_type(self.Ot, float, "Ot")
-        assert 0 < self.Ot and 1 >= self.Ot
+        assert self.Ot > 0 and self.Ot <= 1
 
     def get_prologue(self):
         s = "* OligoProbeBuilder *\n\n"
         s += f"Aim to build probes with {self.N} oligos each.\n"
         s += f"Off-target threshold range set at {self.F}.\n"
+        s += "Threshold on the delta free energy of the most stable"
         if isinstance(self.Gs[0], int):
-            s += "Threshold on the delta free energy of the most stable"
             s += f" secondary structure set at range {self.Gs} kcal/mol.\n"
         else:
-            s += "Threshold on the delta free energy of the most stable"
             s += " secondary structure\nset at range"
             s += f" {[t*100 for t in self.Gs]}% of the delta free energy of"
             s += " hybridization.\n"
@@ -384,7 +379,7 @@ class OligoProbeBuilder(OligoPathBuilder):
         oGroup = self.__focus_oligos(window, oGroup)
         probe_list = self.__explore_filter(oGroup, logger)
         if not np.isnan(window["cfr_start"]):
-            while 0 == len(probe_list):
+            while len(probe_list) == 0:
                 oGroup.reset_threshold()
                 if oGroup.focus_window_size >= self.Ps:
                     oGroup.discard_focused_oligos_safeN(self.N - 1, self.D)
@@ -400,14 +395,14 @@ class OligoProbeBuilder(OligoPathBuilder):
         probe_list = self.__get_non_overlapping_probes(
             oGroup.get_focused_oligos(True), logger
         )
-        while 0 == len(probe_list):
+        while len(probe_list) == 0:
             score_thr += self.Ot
             if score_thr > max_score:
                 break
 
             oGroup.apply_threshold(score_thr)
             nOligosUsable = oGroup.get_n_focused_oligos(True)
-            if nOligosUsable == noligos or 0 == nOligosUsable:
+            if nOligosUsable in [noligos, 0]:
                 continue
 
             logger.info(
@@ -458,7 +453,7 @@ class OligoProbeBuilder(OligoPathBuilder):
             )
         )
 
-        if 0 == max_score and 0 == nOligos_prev_score_thr:
+        if max_score == 0 and nOligos_prev_score_thr == 0:
             return []
 
         while 0 == nOligos_prev_score_thr and score_thr <= max_score - self.Ot:
@@ -484,7 +479,7 @@ class OligoProbeBuilder(OligoPathBuilder):
         # to OligoProbe objects.
 
         paths = self.get_non_overlapping_paths(oData, self.D)
-        if 0 == len(paths):
+        if len(paths) == 0:
             logger.warning("No oligo paths found.")
             return []
 
@@ -538,7 +533,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 
     def reduce_probe_list(self, probe_list):
         try:
-            if 0 == len(probe_list):
+            if len(probe_list) == 0:
                 return []
             sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
 
@@ -584,11 +579,10 @@ class OligoProbeBuilder(OligoPathBuilder):
         oligos = pd.read_csv(oPath, "\t", index_col=0)
         paths = pd.read_csv(pPath, "\t", index_col=0)
 
-        probe_list = []
-        for p in paths.iloc[:, 0]:
-            probe_list.append(OligoProbe(oligos.loc[[int(o) for o in p.split(",")]]))
-
-        return probe_list
+        return [
+            OligoProbe(oligos.loc[[int(o) for o in p.split(",")]])
+            for p in paths.iloc[:, 0]
+        ]
 
     @staticmethod
     def export_probes(probe_list, opath):
@@ -603,11 +597,11 @@ class OligoProbeBuilder(OligoPathBuilder):
             os.path.join(opath, "oligos.tsv"), "\t"
         )
 
-        probe_paths = []
-        for pi in range(len(probe_list)):
-            probe_paths.append(
-                [",".join([str(x) for x in probe_list[pi].data.index.tolist()])]
-            )
+        probe_paths = [
+            [",".join([str(x) for x in probe_list[pi].data.index.tolist()])]
+            for pi in range(len(probe_list))
+        ]
+
         probe_paths = pd.DataFrame(probe_paths)
         probe_paths.columns = ["cs_oligos"]
         probe_paths.to_csv(os.path.join(opath, "probe_paths.tsv"), "\t")

@@ -28,7 +28,7 @@ class OligoProbeSet(object):
 
     @probe_list.setter
     def probe_list(self, probe_list):
-        assert all([isinstance(p, OligoProbe) for p in probe_list])
+        assert all(isinstance(p, OligoProbe) for p in probe_list)
         self._probe_list = sorted(probe_list, key=lambda p: p.range[0])
         self._probe_tm_ranges = [p.tm_range for p in self.probe_list]
         self._tm_range = (
@@ -41,10 +41,7 @@ class OligoProbeSet(object):
         probe_starts = np.array([r[0] for r in self.probe_ranges])
         probe_ends = np.array([r[1] for r in self.probe_ranges])
         self._range = (probe_starts.min(), probe_ends.max())
-        if 1 == len(probe_list):
-            self._ds = 0
-        else:
-            self._ds = probe_starts[1:] - probe_ends[:-1]
+        self._ds = 0 if len(probe_list) == 1 else probe_starts[1:] - probe_ends[:-1]
         self._d_mean = np.mean(self.ds)
         self._d_range = (np.min(self.ds), np.max(self.ds))
         tm = [p.data["Tm"].tolist() for p in self.probe_list]
@@ -189,7 +186,7 @@ class OligoProbeSetBuilder(object):
         probe_set_list = [(p,) for p in window_list[i]]
 
         for w in window_list[(i + 1) :]:
-            if 0 == len(w):
+            if len(w) == 0:
                 continue
 
             current_probe_set_list = list(tuple(probe_set_list))
@@ -207,7 +204,7 @@ class OligoProbeSetBuilder(object):
         for (wSet, window_list) in probe_candidates.items():
             window_list = list(window_list.values())
             i = 0
-            while 0 == len(window_list[i]):
+            while len(window_list[i]) == 0:
                 i += 1
 
             probe_set_list = self.__build_probe_set_list(window_list, i)
@@ -227,7 +224,7 @@ class OligoProbeSetBuilder(object):
             f"Built {len(self.probe_set_list)} " + "probe set candidates in total."
         )
 
-        if 0 < len(self.probe_set_list):
+        if self.probe_set_list:
             pd.concat([ps.featDF for ps in self.probe_set_list]).reset_index(
                 drop=True
             ).to_csv(os.path.join(self.out_path, "probe_sets.tsv"), "\t")
