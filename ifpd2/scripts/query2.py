@@ -254,5 +254,4 @@ def assert_reusable(output_path: str):
         ]
     )
     assert not isfile(output_path), assert_msg + " leads to a file"
-    if not False:
-        assert not isdir(output_path), assert_msg + " leads to a directory."
+    assert not isdir(output_path), assert_msg + " leads to a directory."
