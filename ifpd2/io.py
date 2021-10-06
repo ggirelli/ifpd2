@@ -9,7 +9,7 @@ from ifpd2 import const
 import logging
 import os
 import pandas as pd  # type: ignore
-from typing import Dict, Generator, List, Set, Tuple
+from typing import Dict, Iterator, List, Set, Tuple
 from tqdm import tqdm  # type: ignore
 
 
@@ -111,7 +111,7 @@ def parse_secondary(path: str) -> pd.DataFrame:
 
 def write_oligos(
     output_path: str,
-    oligo_generator: Generator[Tuple[str, str], None, None],
+    oligo_generator: Iterator[Tuple[str, str]],
     desc: str = "writing",
 ) -> None:
     with open(output_path, "w+") as OH:
