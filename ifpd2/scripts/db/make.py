@@ -3,25 +3,28 @@
 @contact: gigi.ga90@gmail.com
 """
 
-import argparse
+import click  # type: ignore
 import copy
+from ifpd2.const import CONTEXT_SETTINGS, DEFAULT_DATABASE_INDEX_BIN_SIZE
+from ifpd2.const import dtype_header_features, dtype_sequence_features
+from ifpd2.const import database_columns, dtype_hush, dtype_melting, dtype_secondary
 from ifpd2 import asserts as ass
-from ifpd2.asserts import enable_rich_assert
-from ifpd2 import const, database as db, io
-from ifpd2.scripts import arguments as ap
+from ifpd2.chromosome import ChromosomeDict
+from ifpd2.io import parse_hush, parse_melting, parse_secondary
+from ifpd2.scripts.db.settings import DBMakeSettings
 import logging
 import numpy as np  # type: ignore
 import os
 import pandas as pd  # type: ignore
 import pickle
 from rich.progress import Progress, track  # type: ignore
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Set, Tuple
 
 
-def init_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser(
-        "make",
-        description="""
+@click.command(
+    name="make",
+    context_settings=CONTEXT_SETTINGS,
+    help="""
 Assembles files into a database. At least one of the following is required,
 to retrieve sequence: hush output (-O), or oligo-melting output (-T).
 
@@ -39,104 +42,106 @@ OligoArrayAux   .ct (Connectivity Table) file. Details on format available here:
 Files are merged by: hush header, oligo-melting name, and
 OligoArrayAux name (3rd field of 1st column).
 """,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        help="Assemble a database.",
+)
+@click.argument("output", nargs=1, type=click.Path(exists=False))
+@click.option(
+    "--hush",
+    "-O",
+    metavar="hush_path",
+    nargs=1,
+    multiple=True,
+    type=click.Path(exists=True),
+    help="Path to hush output. Format details above.",
+)
+@click.option(
+    "--melting",
+    "-T",
+    metavar="hush_oligomelting_pathpath",
+    nargs=1,
+    multiple=True,
+    type=click.Path(exists=True),
+    help="Path to oligo-melting output. Format details above.",
+)
+@click.option(
+    "--secondary",
+    "-S",
+    metavar="oligoarrayaux_path",
+    nargs=1,
+    multiple=True,
+    type=click.Path(exists=True),
+    help="Path to OligoArrayAux output. Format details above.",
+)
+@click.option(
+    "--prefix",
+    "-p",
+    type=click.STRING,
+    default="",
+    help="Prefix to be added to chromosome labels.",
+)
+@click.option(
+    "--binsize",
+    "-b",
+    default=DEFAULT_DATABASE_INDEX_BIN_SIZE,
+    type=click.INT,
+    help=f"Index bin size. Default: {DEFAULT_DATABASE_INDEX_BIN_SIZE}",
+)
+def main(
+    output: str,
+    hush: List[str],
+    melting: List[str],
+    secondary: List[str],
+    prefix: str,
+    binsize: int,
+) -> None:
+    settings = DBMakeSettings(output)
+    settings.add_off_target_path_list(hush)
+    settings.add_melting_temperature_path_list(melting)
+    settings.add_secondary_structure_path_list(secondary)
+    settings.bin_size = binsize
+    settings.prefix = prefix
+
+    assert not (
+        0 == len(settings.off_target_paths)
+        and 0 != len(settings.melting_temperature_paths)
+    ), "please provide either --hush or --melting"
+
+    os.mkdir(settings.output_path)
+    dbdf = pd.DataFrame(columns=["name"])
+    dbdf.set_index("name", inplace=True)
+
+    dbdf = populate_db(dbdf, settings.off_target_paths, parse_hush, "hush")
+    dbdf = populate_db(
+        dbdf, settings.melting_temperature_paths, parse_melting, "oligo-melting"
+    )
+    dbdf = populate_db(
+        dbdf, settings.secondary_structure_paths, parse_secondary, "OligoArrayAux"
     )
 
-    parser.add_argument("output", type=str, help="Path to database folder (output).")
+    dbdf = reduce_sequence_columns(dbdf)
+    dbdf, dtype_sequence = parse_sequences(dbdf)
+    dbdf, dtype_header = parse_record_headers(dbdf, prefix)
 
-    indata = parser.add_argument_group("input arguments")
-    indata.add_argument(
-        "-O",
-        "--hush",
-        metavar="hush_path",
-        nargs="+",
-        type=str,
-        help="Path to hush output. Format details above.",
-    )
-    indata.add_argument(
-        "-T",
-        "--melting",
-        metavar="oligomelting_path",
-        nargs="+",
-        type=str,
-        help="Path to oligo-melting output. Format details above.",
-    )
-    indata.add_argument(
-        "-S",
-        "--secondary",
-        metavar="oligoarrayaux_path",
-        nargs="+",
-        type=str,
-        help="Path to OligoArrayAux output. Format details above.",
-    )
+    dtype = {}
+    dtype.update(dtype_melting)
+    dtype.update(dtype_hush)
+    dtype.update(dtype_secondary)
+    dtype.update(dtype_sequence)
+    dtype.update(dtype_header)
 
-    advanced = parser.add_argument_group("advanced arguments")
-    advanced.add_argument(
-        "-p",
-        "--prefix",
-        metavar="chromPrefix",
-        default="",
-        type=str,
-        help="Prefix to be added to chromosome labels. Default: ''.",
-    )
-    advanced.add_argument(
-        "-b",
-        "--binsize",
-        metavar="indexBin",
-        default=const.DEFAULT_DATABASE_INDEX_BIN_SIZE,
-        type=int,
-        help="Binning for the index.",
-    )
+    for column in dtype:
+        if column not in dbdf.columns:
+            dbdf["column"] = np.repeat(np.nan, dbdf.shape[0])
+    dbdf = dbdf.loc[:, database_columns]
 
-    parser = ap.add_version_option(parser)
-    parser.set_defaults(parse=parse_arguments, run=run)
+    write_database(dbdf, dtype, settings)
 
-    return parser
-
-
-def init_log(args: argparse.Namespace) -> None:
-    logging.info(f"output folder: '{args.output}'")
-    logging.info(f"chromosome prefix: '{args.prefix}'")
-    if args.hush is not None:
-        logging.info(f"hush: {args.hush}")
-    if args.melting is not None:
-        logging.info(f"oligo-melting: {args.melting}")
-    if args.secondary is not None:
-        logging.info(f"OligoArrayAux: {args.secondary}")
-
-
-def check_files_exist(path_list: Optional[List[str]], software_name: str) -> None:
-    if path_list is None:
-        return
-    for path in path_list:
-        assert os.path.isfile(path), f"{software_name} output not found: {path}"
-
-
-@enable_rich_assert
-def parse_arguments(args: argparse.Namespace) -> argparse.Namespace:
-    assert not os.path.isdir(
-        args.output
-    ), f"database folder already exists: {args.output}."
-
-    check_files_exist(args.hush, "hush")
-    check_files_exist(args.melting, "oligo-melting")
-    check_files_exist(args.secondary, "OligoArrayAux")
-
-    assert 1 <= ((args.hush is not None) + (args.melting is not None)), " ".join(
-        [
-            "one of the following is required:",
-            "FASTA input, hush output, or oligo-melting output",
-        ]
-    )
-
-    return args
+    logging.info("Done. :thumbs_up: :smiley:")
 
 
 def parse_input(
-    path_list: Optional[List[str]], parse_function: Callable, software_name: str
+    path_list: Set[str], parse_function: Callable, software_name: str
 ) -> pd.DataFrame:
-    if path_list is None:
+    if len(path_list) == 0:
         return pd.DataFrame()
     logging.info(f"parsing {software_name} output")
     return pd.concat([parse_function(path) for path in path_list])
@@ -144,11 +149,11 @@ def parse_input(
 
 def populate_db(
     db: pd.DataFrame,
-    path_list: Optional[List[str]],
+    path_list: Set[str],
     parse_function: Callable,
     software_name: str,
 ) -> pd.DataFrame:
-    if path_list is None:
+    if len(path_list) == 0:
         return db
     parsed_db = parse_input(path_list, parse_function, software_name)
     logging.info(f"adding {software_name} output to database")
@@ -185,7 +190,7 @@ def parse_sequences(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
         )
 
     df["gc_content"] = gc_content_list
-    dtype = copy.copy(const.dtype_sequence_features)
+    dtype = copy.copy(dtype_sequence_features)
     dtype["sequence"] = f"|S{max(sequence_length_list)}"
     return (df.astype(dtype), dtype)
 
@@ -228,18 +233,18 @@ def parse_record_headers(
     ass.ert_in_dtype(db["end"].values.max(), "u4")
     db.reset_index(drop=True, inplace=True)
 
-    dtype = copy.copy(const.dtype_header_features)
+    dtype = copy.copy(dtype_header_features)
     dtype["name"] = f"|S{max(name_length_set)}"
     dtype["chromosome"] = f"|S{max(chromosome_length_set)}"
     return (db.astype(dtype), dtype)
 
 
 def write_database(
-    dbdf: pd.DataFrame, dtype: Dict[str, str], args: argparse.Namespace
+    dbdf: pd.DataFrame, dtype: Dict[str, str], settings: DBMakeSettings
 ) -> None:
     with Progress() as progress:
         chromosome_set: Set[bytes] = set(dbdf["chromosome"].values)
-        chromosome_data = db.ChromosomeDict(args.binsize)
+        chromosome_data = ChromosomeDict(settings.bin_size)
         chromosome_task = progress.add_task(
             "exporting chromosome",
             total=len(chromosome_set),
@@ -256,7 +261,8 @@ def write_database(
             chromosome_data.add_chromosome(chromosome_db, dtype, progress)
 
             with open(
-                os.path.join(args.output, f"{selected_chrom.decode()}.bin"), "wb"
+                os.path.join(settings.output_path, f"{selected_chrom.decode()}.bin"),
+                "wb",
             ) as IH:
                 writing_track = progress.add_task(
                     f"writing {selected_chrom.decode()}.bin",
@@ -271,40 +277,5 @@ def write_database(
             progress.update(chromosome_task, advance=1)
 
     logging.info("writing db.pickle")
-    with open(os.path.join(args.output, "db.pickle"), "wb") as OH:
-        args.parse = None
-        args.run = None
-        pickle.dump(dict(chromosomes=chromosome_data, dtype=dtype, args=args), OH)
-
-
-@enable_rich_assert
-def run(args: argparse.Namespace) -> None:
-    init_log(args)
-    os.mkdir(args.output)
-
-    dbdf = pd.DataFrame(columns=["name"])
-    dbdf.set_index("name", inplace=True)
-
-    dbdf = populate_db(dbdf, args.hush, io.parse_hush, "hush")
-    dbdf = populate_db(dbdf, args.melting, io.parse_melting, "oligo-melting")
-    dbdf = populate_db(dbdf, args.secondary, io.parse_secondary, "OligoArrayAux")
-
-    dbdf = reduce_sequence_columns(dbdf)
-    dbdf, dtype_sequence = parse_sequences(dbdf)
-    dbdf, dtype_header = parse_record_headers(dbdf, args.prefix)
-
-    dtype = {}
-    dtype.update(const.dtype_melting)
-    dtype.update(const.dtype_hush)
-    dtype.update(const.dtype_secondary)
-    dtype.update(dtype_sequence)
-    dtype.update(dtype_header)
-
-    for column in dtype:
-        if column not in dbdf.columns:
-            dbdf["column"] = np.repeat(np.nan, dbdf.shape[0])
-    dbdf = dbdf.loc[:, const.database_columns]
-
-    write_database(dbdf, dtype, args)
-
-    logging.info("Done. :thumbs_up: :smiley:")
+    with open(os.path.join(settings.output_path, "db.pickle"), "wb") as OH:
+        pickle.dump(dict(chromosomes=chromosome_data, dtype=dtype, args=settings), OH)

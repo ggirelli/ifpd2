@@ -135,7 +135,7 @@ class OligoPathBuilder(object):
     oligos (i.e., probes) from an oligo DataFrame in input."""
 
     N = int(48)  # Number of oligos per probe
-    D = int(2)  # Minimum distance between consecutive oligos
+    D: int = int(2)  # Minimum distance between consecutive oligos
     Tr = 10.0  # Melting temperature range half-width
     Ps = int(10000)  # Probe size threshold, in nt (Ps > 1)
     Ph = 0.1  # Maximum hole size in probe as fraction of probe size

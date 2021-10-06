@@ -13,7 +13,7 @@ import pandas as pd  # type: ignore
 from pathlib import Path
 import shutil
 from tqdm import tqdm  # type: ignore
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
 
 from ifpd2 import asserts as ass
 from ifpd2.logging import add_log_file_handler
@@ -33,13 +33,13 @@ class GenomicWindowSet(object):
     E = int(3500000)  # Region end coordinate (excluded)
 
     X = 20  # Number of probes to design
-    Ws = None  # Window size (used when X is not provided)
-    Wh = 0.1  # Window shift (as a percentage of the window size)
+    Ws: Optional[int] = None  # Window size (used when X is not provided)
+    Wh: Optional[float] = 0.1  # Window shift (as a percentage of the window size)
 
-    Rs = int(8000)  # Region focus size, either in nt (Rs > 1)
+    Rs: Union[int, float] = int(8000)  # Region focus size, either in nt (Rs > 1)
     #  or fraction of Ws (0<Rs<=1)
     #  When provided in nt, it is applied only if Rs<Ws
-    Rt = int(1000)  # Region focus step, either in nt (Rt > 1)
+    Rt: Union[int, float] = int(1000)  # Region focus step, either in nt (Rt > 1)
     #  or fraction of Rs (0<Rt<=1),
     #  for focus region expansion
     _growing = False

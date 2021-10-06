@@ -3,42 +3,40 @@
 @contact: gigi.ga90@gmail.com
 """
 
-import argparse
+import click  # type: ignore
 from ifpd2 import __version__
-from ifpd2.scripts import arguments as ap
-from ifpd2 import scripts
+from ifpd2.const import CONTEXT_SETTINGS
+from ifpd2.scripts import db, query, query2
 import sys
+import webbrowser
 
 
-def default_parser(*args) -> None:
-    print("ifpd2 -h for usage details.")
-    sys.exit()
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description=f"""
+@click.group(
+    name="ifpd2",
+    context_settings=CONTEXT_SETTINGS,
+    help=f"""\b
 Version:    {__version__}
 Author:     Gabriele Girelli
 Docs:       http://ggirelli.github.io/ifpd2
 Code:       http://github.com/ggirelli/ifpd2
 
-Another iFISH probe design pipeline (II).
-""",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.set_defaults(parse=default_parser)
-    parser = ap.add_version_option(parser)
+Another iFISH probe design pipeline (II).""",
+)
+@click.version_option(__version__)
+def main():
+    pass
 
-    subparsers = parser.add_subparsers(
-        title="sub-commands",
-        help="Access the help page for a sub-command with: sub-command -h",
-    )
 
-    scripts.db.init_parser(subparsers)
-    scripts.query.init_parser(subparsers)
-    scripts.query2.init_parser(subparsers)
+@click.command(
+    "_docs",
+    help="Open online documentation on your favorite browser.",
+)
+def open_documentation() -> None:
+    webbrowser.open("https://ggirelli.github.io/radiantkit/")
+    sys.exit()
 
-    args = parser.parse_args()
-    args = args.parse(args)
-    args.run(args)
+
+main.add_command(open_documentation)
+main.add_command(db.run.main)
+main.add_command(query.main)
+main.add_command(query2.main)
