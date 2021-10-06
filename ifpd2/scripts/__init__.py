@@ -3,7 +3,7 @@
 @contact: gigi.ga90@gmail.com
 """
 
-from ifpd2.scripts import db
+from ifpd2.scripts import db, extract_kmers
 from ifpd2.scripts import ifpd2
 from ifpd2.scripts import query, query2
 
@@ -18,6 +18,7 @@ logging.basicConfig(
 
 __all__ = [
     "db",
+    "extract_kmers",
     "ifpd2",
     "query",
     "query2",

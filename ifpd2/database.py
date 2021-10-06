@@ -3,7 +3,6 @@
 @contact: gigi.ga90@gmail.com
 """
 
-import argparse
 import copy
 from ifpd2 import const
 from ifpd2.chromosome import ChromosomeData, ChromosomeDict
