@@ -67,13 +67,13 @@ class PositiveFloat:
     limit_included: bool = True
 
     def __post_init__(self):
-        if self.limit is not None:
-            if self.limit_included:
-                assert 0 < self.n <= self.limit
-            else:
-                assert 0 < self.n < self.limit
-        else:
+        if self.limit is None:
             assert 0 < self.n
+
+        elif self.limit_included:
+            assert 0 < self.n <= self.limit
+        else:
+            assert 0 < self.n < self.limit
 
 
 @dataclass(frozen=True)
