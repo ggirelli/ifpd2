@@ -6,7 +6,7 @@
 import click  # type: ignore
 from ifpd2 import __version__
 from ifpd2.const import CONTEXT_SETTINGS
-from ifpd2.scripts import db, query, query2
+from ifpd2.scripts import db, extract_kmers, query, query2
 import sys
 import webbrowser
 
@@ -37,6 +37,7 @@ def open_documentation() -> None:
 
 
 main.add_command(open_documentation)
+main.add_command(extract_kmers.main)
 main.add_command(db.run.main)
 main.add_command(query.main)
 main.add_command(query2.main)
