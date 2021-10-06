@@ -39,8 +39,9 @@ def main(input_path: str, output_path: str, kmer_size: int) -> None:
     base, _ = splitext(basename(input_path))
     write_oligos(
         path_join(normpath(output_path), f"{base}.GC35to85_Reference.fa"),
-        (o for o in valid_oligos),
+        iter(valid_oligos),
     )
+
     write_oligos(
         path_join(normpath(output_path), f"{base}.GC35to85_RevCompl.fa"),
         ((h, reverse_complement(s)) for h, s in valid_oligos),
