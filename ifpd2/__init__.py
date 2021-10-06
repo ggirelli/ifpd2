@@ -9,6 +9,7 @@ from ifpd2 import chromosome, database, region
 from ifpd2 import oligo, probe, probe_set
 
 from importlib.metadata import version, PackageNotFoundError
+from typing import List
 
 try:
     __version__ = version(__name__)
@@ -30,3 +31,4 @@ __all__ = [
     "probe",
     "probe_set",
 ]
+__path__: List[str]
