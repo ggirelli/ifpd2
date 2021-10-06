@@ -101,9 +101,10 @@ def main(
     settings.prefix = prefix
 
     assert not (
-        0 == len(settings.off_target_paths)
-        and 0 != len(settings.melting_temperature_paths)
+        len(settings.off_target_paths) == 0
+        and len(settings.melting_temperature_paths) != 0
     ), "please provide either --hush or --melting"
+
 
     os.mkdir(settings.output_path)
     dbdf = pd.DataFrame(columns=["name"])
@@ -141,7 +142,7 @@ def main(
 def parse_input(
     path_list: Set[str], parse_function: Callable, software_name: str
 ) -> pd.DataFrame:
-    if len(path_list) == 0:
+    if not path_list:
         return pd.DataFrame()
     logging.info(f"parsing {software_name} output")
     return pd.concat([parse_function(path) for path in path_list])
@@ -153,7 +154,7 @@ def populate_db(
     parse_function: Callable,
     software_name: str,
 ) -> pd.DataFrame:
-    if len(path_list) == 0:
+    if not path_list:
         return db
     parsed_db = parse_input(path_list, parse_function, software_name)
     logging.info(f"adding {software_name} output to database")
