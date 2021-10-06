@@ -6,6 +6,7 @@
 import click  # type: ignore
 from ifpd2 import __version__
 from ifpd2.const import CONTEXT_SETTINGS
+from ifpd2.scripts import db, query, query2
 import sys
 import webbrowser
 
@@ -25,6 +26,7 @@ Another iFISH probe design pipeline (II).""",
 def main():
     pass
 
+
 @click.command(
     "_docs",
     help="Open online documentation on your favorite browser.",
@@ -33,4 +35,8 @@ def open_documentation() -> None:
     webbrowser.open("https://ggirelli.github.io/radiantkit/")
     sys.exit()
 
+
 main.add_command(open_documentation)
+main.add_command(db.run.main)
+main.add_command(query.main)
+main.add_command(query2.main)

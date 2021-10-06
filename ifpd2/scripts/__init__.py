@@ -3,9 +3,8 @@
 @contact: gigi.ga90@gmail.com
 """
 
-from ifpd2.scripts import arguments, ifpd2
-from ifpd2.scripts import db, db_check, db_dump, db_info
-from ifpd2.scripts import db_make, db_merge, db_reindex
+from ifpd2.scripts import db
+from ifpd2.scripts import ifpd2
 from ifpd2.scripts import query, query2
 
 import logging
@@ -18,15 +17,8 @@ logging.basicConfig(
 )
 
 __all__ = [
-    "arguments",
-    "ifpd2",
     "db",
-    "db_check",
-    "db_dump",
-    "db_info",
-    "db_make",
-    "db_merge",
-    "db_reindex",
+    "ifpd2",
     "query",
     "query2",
 ]
