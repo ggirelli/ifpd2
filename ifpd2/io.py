@@ -116,4 +116,4 @@ def write_oligos(
 ) -> None:
     with open(output_path, "w+") as OH:
         for oligo in tqdm(oligo_generator, desc=desc, leave=False):
-            OH.write("%s\n%s\n" % oligo)
+            OH.write(">%s\n%s\n" % oligo)
