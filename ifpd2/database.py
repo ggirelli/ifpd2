@@ -3,6 +3,7 @@
 @contact: gigi.ga90@gmail.com
 """
 
+import argparse
 import copy
 from ifpd2 import const
 from ifpd2.chromosome import ChromosomeData, ChromosomeDict
@@ -144,7 +145,10 @@ class DataBase(object):
             details = pickle.load(IH)
             self._chromosomes = details["chromosomes"]
             self._dtype = details["dtype"]
-            self._args = details["args"]
+            if isinstance(details["args"], argparse.Namespace):
+                self._args = self.__parse_old_pickle(details["args"])
+            else:
+                self._args = dict(details["args"])
 
         assert isinstance(self._chromosomes, ChromosomeDict)
         for chromosome in self.chromosome_list:
@@ -185,6 +189,18 @@ class DataBase(object):
     @property
     def dtype(self) -> Dict[str, str]:
         return copy.copy(self._dtype)
+
+    @staticmethod
+    def __parse_old_pickle(args: argparse.Namespace) -> Dict[str, Any]:
+        _args = vars(args)
+        return dict(
+            output_path=_args["output"],
+            off_target_paths=_args["hush"],
+            melting_temperature_paths=_args["melting"],
+            secondary_structure_paths=_args["secondary"],
+            bin_size=_args["binsize"],
+            prefix=_args["prefix"],
+        )
 
     def get_chromosome(self, chromosome: bytes) -> ChromosomeData:
         return self._chromosomes.get_chromosome(chromosome)
