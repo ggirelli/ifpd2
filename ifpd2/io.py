@@ -6,6 +6,7 @@
 import copy
 from ifpd2 import asserts as ass
 from ifpd2 import const
+import gzip
 import logging
 import os
 import pandas as pd  # type: ignore
@@ -25,6 +26,16 @@ def get_dtype_length(dtype: Dict[str, str]) -> int:
     return sum(int(label.strip("><|SUuif")) for label in dtype.values())
 
 
+def iterate_lines(path: str) -> Iterator:
+    """Iterate lines of a file, even if gzipped."""
+    if not path.endswith(".gz"):
+        yield from open(path)
+    else:
+        with gzip.open(path) as IH:
+            for line in IH:
+                yield line.decode()
+
+
 def parse_hush(path: str) -> pd.DataFrame:
     """Parse HUSH output.
 
@@ -38,18 +49,17 @@ def parse_hush(path: str) -> pd.DataFrame:
     logging.info(f"parsing: '{path}'")
     sequence_lengths: Set[int] = set()
     parsed_lines: List[Tuple[str, str, int]] = []
-    with open(path) as IH:
-        header = ""
-        for line in tqdm(IH, desc="Parsing hush output", leave=False):
-            if line.startswith(">"):
-                header = line.strip()
-            else:
-                line_split = line.strip().split(",")
-                parsed_lines.append(
-                    (header[1:], line_split[0], int(line_split[1].strip()))
-                )
-                sequence_lengths.add(len(line_split[0]))
-                header = ""
+
+    header = ""
+    for line in tqdm(iterate_lines(path), desc="Parsing hush output", leave=False):
+        if line.startswith(">"):
+            header = line.strip()
+        else:
+            line_split = line.strip().split(",")
+            parsed_lines.append((header[1:], line_split[0], int(line_split[1].strip())))
+            sequence_lengths.add(len(line_split[0]))
+            header = ""
+
     hush_df = pd.DataFrame(parsed_lines, columns=["name", "sequence", "off_target_no"])
     hush_df.set_index("name", inplace=True)
     ass.ert_in_dtype(hush_df["off_target_no"].values.max(), "u4")
