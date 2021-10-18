@@ -39,6 +39,11 @@ tqdm = "^4.58.0"
 pytest = "^6.2.5"
 black = "^21.9b0"
 
+[tool.vulture]
+paths = ["ifpd2"]
+min_confidence = 80
+verbose = true
+
 [build-system]
 requires = ["poetry>=0.12"]
 build-backend = "poetry.masonry.api"

@@ -33,8 +33,6 @@ repos:
     rev: v2.1.0
     hooks:
     -   id: codespell
-        name: codespell
-        description: Checks for common misspellings in text files.
-        entry: codespell --ignore-words ignore-spelling-words.txt readme.md code.py
+        entry: codespell --ignore-words=ignore-spelling-words.txt
         language: python
         types: [text]

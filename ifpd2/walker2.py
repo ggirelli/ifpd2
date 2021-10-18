@@ -134,7 +134,7 @@ class ChromosomeWalker(object):
     def buffer(self, start_from_nt: int = 0, end_at_nt: int = -1) -> Iterator[Record]:
         """Buffer a chromosome's records.
 
-        Buffer records from a chromosome withing the specified region.
+        Buffer records from a chromosome within the specified region.
         To buffer the whole records, specify a [0, -1] region.
 
         Keyword Arguments:

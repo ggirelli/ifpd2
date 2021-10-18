@@ -611,7 +611,7 @@ class Walker(GenomicWindowSet):
         **kwargs,
     ):
         # Process oligos from window using fprocess. Then, post-process them
-        # with fopost. Requires at least N oligos to proceeed. If opath is
+        # with fopost. Requires at least N oligos to proceed. If opath is
         # specified, a ".done" file is touched upon successful postprocessing.
         logger = logging.getLogger(loggerName)
         kwargs["loggerName"] = loggerName
