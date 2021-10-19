@@ -15,7 +15,6 @@ from ifpd2.scripts.db import check, dump, info, make
 )
 def main() -> None:
     '''Just a hook for the entry point. Silence is golden!'''
-    pass
 
 
 main.add_command(check.main)
