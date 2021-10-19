@@ -44,9 +44,6 @@ class GenomicWindowSet:
     #  for focus region expansion
     _growing = False
 
-    def __init__(self):
-        super(GenomicWindowSet, self).__init__()
-
     @property
     def window_sets(self):
         return self._window_sets
