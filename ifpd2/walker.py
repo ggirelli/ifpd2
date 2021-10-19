@@ -128,14 +128,13 @@ class GenomicWindowSet:
         if not os.path.isdir(os.path.join(self.out_path, "window_sets")):
             os.mkdir(os.path.join(self.out_path, "window_sets"))
 
-        if self.S == self.E:
-            if isinstance(self.Ws, type(None)):
-                raise AssertionError(" ".join(
-                    [
-                        "During full-chromosome search, provide a window size.",
-                        "I.e., it is not possible to design X probes.",
-                    ]
-                ))
+        if self.S == self.E and isinstance(self.Ws, type(None)):
+            raise AssertionError(" ".join(
+                [
+                    "During full-chromosome search, provide a window size.",
+                    "I.e., it is not possible to design X probes.",
+                ]
+            ))
 
         if isinstance(self.X, int):
             self.Ws = (
