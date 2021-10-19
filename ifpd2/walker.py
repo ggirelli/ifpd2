@@ -208,7 +208,6 @@ class GenomicWindowSet:
             self.__focus_on_center = True
         else:
             cstart, cend = (np.nan, np.nan)
-            self.__focus_on_center = False
         return [[self.S, mid, self.S + self.Ws, cstart, cend, 0, 0]]
 
     def _add_window(self):
