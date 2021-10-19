@@ -116,8 +116,7 @@ class Record:
         allowed_columns = ["score", *const.database_columns]
         if key not in allowed_columns:
             raise KeyError(f"unrecognized key '{key}'")
-        else:
-            return self.data[key]
+        return self.data[key]
 
     def __repr__(self) -> str:
         return str(self._data)
