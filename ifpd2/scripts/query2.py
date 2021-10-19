@@ -225,7 +225,7 @@ def check_input(
     return (probes, window_size, window_shift)
 
 
-class QuerySettings(object):
+class QuerySettings:
     _db_folder: Folder
     _output_path: Folder
 

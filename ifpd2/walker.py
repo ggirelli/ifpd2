@@ -23,7 +23,7 @@ from ifpd2.probe import OligoProbeBuilder
 from ifpd2.walker2 import ChromosomeWalker
 
 
-class GenomicWindowSet(object):
+class GenomicWindowSet:
     """Genomic window manager."""
 
     _window_sets = None

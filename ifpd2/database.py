@@ -16,7 +16,7 @@ import pandas as pd  # type: ignore
 from typing import Any, Dict, List
 
 
-class Record(object):
+class Record:
     """DataBase Record"""
 
     _data: Dict[str, Any]
@@ -123,7 +123,7 @@ class Record(object):
         return str(self._data)
 
 
-class DataBase(object):
+class DataBase:
     """Buffering and checking class for ifpd2 database."""
 
     _root: str

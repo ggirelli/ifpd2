@@ -12,7 +12,7 @@ from rich.progress import Progress, TaskID  # type: ignore
 from typing import Dict, List, Set, Tuple
 
 
-class ChromosomeIndex(object):
+class ChromosomeIndex:
     """ChromosomeIndex"""
 
     _bin_size: int
@@ -131,7 +131,7 @@ class ChromosomeIndex(object):
         return condition
 
 
-class ChromosomeData(object):
+class ChromosomeData:
     """Contains information on a chromosome"""
 
     _name: bytes
@@ -225,7 +225,7 @@ class ChromosomeData(object):
         return condition
 
 
-class ChromosomeDict(object):
+class ChromosomeDict:
     """Wraps ChromosomeData instances into a dictionary
     and allow easier access to their attributes."""
 

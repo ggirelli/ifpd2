@@ -8,7 +8,7 @@ import logging
 from typing import List, Tuple
 
 
-class GenomicRegion(object):
+class GenomicRegion:
     """Details on genomic region with a central focus region."""
 
     __chrom: bytes
@@ -151,7 +151,7 @@ class GenomicRegion(object):
         self.__focusEnd = min(self.__chromEnd, self.__focusEnd + self.__focusStep // 2)
 
 
-class GenomicRegionBuilder(object):
+class GenomicRegionBuilder:
     """docstring for GenomicRegionBuilder"""
 
     __chromosome: bytes
