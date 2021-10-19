@@ -178,11 +178,9 @@ class GenomicWindowSet:
                     np.floor(window_mids + self.Rs / 2),
                 ]
             )
-            self.__focus_on_center = True
         else:
             nans = np.array([np.nan for x in range(window_mids.shape[0])])
             central_regions = np.vstack([nans, nans]).transpose()
-            self.__focus_on_center = False
 
         window_sets = []
         for i in range(len(np.arange(0, 1, self.Wh))):
@@ -207,7 +205,6 @@ class GenomicWindowSet:
         mid = self.S + self.Ws / 2
         if self.Rs < self.Ws:
             cstart, cend = (np.floor(mid - self.Rs / 2), np.floor(mid + self.Rs / 2))
-            self.__focus_on_center = True
         else:
             cstart, cend = (np.nan, np.nan)
         return [[self.S, mid, self.S + self.Ws, cstart, cend, 0, 0]]
