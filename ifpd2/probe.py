@@ -144,9 +144,6 @@ class OligoPathBuilder:
     Ph = 0.1  # Maximum hole size in probe as fraction of probe size
     Po = 0.5  # Probe oligo intersection threshold for path reduction
 
-    def __init__(self):
-        super(OligoPathBuilder, self).__init__()
-
     def _assert(self):
         ass.ert_type(self.N, int, "N")
         ass.ert_nonNeg(self.N, "N")
