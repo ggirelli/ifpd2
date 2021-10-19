@@ -21,7 +21,8 @@ class ChromosomeWalker(object):
     def __init__(self, db: Union[DataBase, str], chromosome: bytes):
         super(ChromosomeWalker, self).__init__()
         self.__db = DataBase(db) if isinstance(db, str) else db
-        assert chromosome in self.__db._chromosomes.keys()
+        if chromosome not in self.__db._chromosomes.keys():
+            raise AssertionError
         self.__IH = open(
             os.path.join(self.__db._root, f"{chromosome.decode()}.bin"), "rb"
         )
@@ -154,7 +155,8 @@ class ChromosomeWalker(object):
             record = self.read_next_record()
 
     def walk_single_region(self, region: GenomicRegion) -> Iterator[List[Record]]:
-        assert region.chromosome == self.__chromosome
+        if region.chromosome != self.__chromosome:
+            raise AssertionError
         focus_start, focus_end = region.focus
         record_list = list(self.buffer(focus_start, focus_end))
         yield record_list

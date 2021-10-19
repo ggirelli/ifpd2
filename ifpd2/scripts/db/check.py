@@ -27,6 +27,7 @@ def main(input_paths: str) -> None:
             desc=f"Checking sorting '{chromosome.decode()}'",
             total=DB.chromosome_recordnos[chromosome],
         ):
-            assert record["start"] > previous_position
+            if record["start"] <= previous_position:
+                raise AssertionError
             previous_position = record["start"]
     logging.info("That's all! :smiley:")

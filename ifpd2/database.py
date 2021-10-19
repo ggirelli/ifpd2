@@ -38,7 +38,8 @@ class Record(object):
             record {bytes} -- record bytes
             column_dtypes {Dict[str, str]} -- column dtypes
         """
-        assert len(record) == get_dtype_length(column_dtypes)
+        if len(record) != get_dtype_length(column_dtypes):
+            raise AssertionError
         self._data = {}
         current_location = 0
         for label in const.database_columns:
@@ -137,9 +138,11 @@ class DataBase(object):
             path {str} -- absolute path to database folder
         """
         super(DataBase, self).__init__()
-        assert os.path.isdir(path), f"cannot find database folder '{path}'"
+        if not os.path.isdir(path):
+            raise AssertionError(f"cannot find database folder '{path}'")
         db_pickle_path = os.path.join(path, "db.pickle")
-        assert os.path.isfile(db_pickle_path), f"'db.pickle is missing in '{path}'"
+        if not os.path.isfile(db_pickle_path):
+            raise AssertionError(f"'db.pickle is missing in '{path}'")
 
         with open(db_pickle_path, "rb") as IH:
             details = pickle.load(IH)
@@ -150,15 +153,18 @@ class DataBase(object):
             else:
                 self._args = dict(details["args"])
 
-        assert isinstance(self._chromosomes, ChromosomeDict)
+        if not isinstance(self._chromosomes, ChromosomeDict):
+            raise AssertionError
         for chromosome in self.chromosome_list:
             chromosome_path = os.path.join(path, f"{chromosome.decode()}.bin")
-            assert os.path.isfile(
+            if not os.path.isfile(
                 chromosome_path
-            ), f"missing expected chromosome file: '{chromosome_path}'"
+            ):
+                raise AssertionError(f"missing expected chromosome file: '{chromosome_path}'")
 
         self._record_byte_size = get_dtype_length(self._dtype)
-        assert self._record_byte_size > 0
+        if self._record_byte_size <= 0:
+            raise AssertionError
 
         self._root = path
 

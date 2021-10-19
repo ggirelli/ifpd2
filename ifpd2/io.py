@@ -45,7 +45,8 @@ def parse_hush(path: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame -- parsed HUSH data
     """
-    assert os.path.isfile(path), f"cannot find file '{path}'"
+    if not os.path.isfile(path):
+        raise AssertionError(f"cannot find file '{path}'")
     logging.info(f"parsing: '{path}'")
     sequence_lengths: Set[int] = set()
     parsed_lines: List[Tuple[str, str, int]] = []
@@ -81,11 +82,13 @@ def parse_melting(path: str, sep: str = "\t", header: bool = True) -> pd.DataFra
     Returns:
         pd.DataFrame -- parsed oligo-melting data
     """
-    assert os.path.isfile(path), f"cannot find file '{path}'"
+    if not os.path.isfile(path):
+        raise AssertionError(f"cannot find file '{path}'")
     logging.info(f"parsing: '{path}'")
     expected_columns = copy.copy(const.dtype_melting)
     melting_df = pd.read_csv(path, sep=sep, header=None, skiprows=1 if header else 0)
-    assert melting_df.shape[1] == len(expected_columns)
+    if melting_df.shape[1] != len(expected_columns):
+        raise AssertionError
     melting_df.columns = list(expected_columns.keys())
     melting_df.set_index("name", inplace=True)
     expected_columns.pop("name", None)
@@ -104,7 +107,8 @@ def parse_secondary(path: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame -- parsed OligoArrayAux .ct data
     """
-    assert os.path.isfile(path), f"cannot find file '{path}'"
+    if not os.path.isfile(path):
+        raise AssertionError(f"cannot find file '{path}'")
     logging.info(f"parsing: '{path}'")
     parsed_lines: List[Tuple[str, float]] = []
     with open(path, "r") as IH:

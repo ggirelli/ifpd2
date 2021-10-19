@@ -23,8 +23,10 @@ from os.path import basename, normpath, splitext
 @click.argument("output_path", metavar="OUTPUT_DIRECTORY", type=click.Path(exists=True))
 @click.argument("kmer_size", metavar="KMER_LENGTH", type=click.INT)
 def main(input_path: str, output_path: str, kmer_size: int) -> None:
-    assert isfile(input_path)
-    assert isdir(output_path)
+    if not isfile(input_path):
+        raise AssertionError
+    if not isdir(output_path):
+        raise AssertionError
 
     logging.info(f"Input  : {input_path}")
     logging.info(f"Output : {output_path}")

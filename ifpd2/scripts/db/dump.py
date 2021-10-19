@@ -51,14 +51,17 @@ def check_region(
     end: Optional[int] = None,
 ) -> Tuple[Optional[str], int, int]:
     if chrom is None:
-        assert (
+        if not (
             start is None and end is None
-        ), "cannot use --region-start or --region-end without --chrom"
+        ):
+            raise AssertionError("cannot use --region-start or --region-end without --chrom")
     elif start is not None:
         chrom_size = DB.chromosome_sizes_nt[chrom.encode()]
-        assert start < chrom_size, f"{start} larger than chromosome size: {chrom_size}"
+        if start >= chrom_size:
+            raise AssertionError(f"{start} larger than chromosome size: {chrom_size}")
         if end is not None:
-            assert start < end, "end location smaller than start"
+            if start >= end:
+                raise AssertionError("end location smaller than start")
 
     return (
         chrom,
@@ -70,6 +73,7 @@ def check_region(
 def get_chromosome_list(DB: DataBase, chrom: Optional[str]) -> List[bytes]:
     chromosome_list = DB.chromosome_list
     if chrom is not None:
-        assert chrom.encode() in chromosome_list, f"'{chrom}' not found"
+        if chrom.encode() not in chromosome_list:
+            raise AssertionError(f"'{chrom}' not found")
         chromosome_list = [chrom.encode()]
     return chromosome_list

@@ -88,7 +88,8 @@ class GenomicWindowSet(object):
         ass.ert_nonNeg(self.S, "S", True)
         ass.ert_type(self.E, int, "E")
         ass.ert_nonNeg(self.E, "E", True)
-        assert self.S <= self.E
+        if self.S > self.E:
+            raise AssertionError
 
         ass.ert_multiTypes(self.X, [int, type(None)], "X")
         ass.ert_multiTypes(self.Ws, [int, type(None)], "Ws")
@@ -110,13 +111,15 @@ class GenomicWindowSet(object):
 
         ass.ert_multiTypes(self.Rs, [int, float], "Rs")
         if isinstance(self.Rs, int):
-            assert self.Rs > 1
+            if self.Rs <= 1:
+                raise AssertionError
         else:
             ass.ert_inInterv(self.Rs, 0, 1, "Rs")
 
         ass.ert_multiTypes(self.Rt, [int, float], "Rt")
         if isinstance(self.Rt, int):
-            assert self.Rt > 1
+            if self.Rt <= 1:
+                raise AssertionError
         else:
             ass.ert_inInterv(self.Rt, 0, 1, "Rt")
 
@@ -126,12 +129,13 @@ class GenomicWindowSet(object):
             os.mkdir(os.path.join(self.out_path, "window_sets"))
 
         if self.S == self.E:
-            assert not isinstance(self.Ws, type(None)), " ".join(
-                [
-                    "During full-chromosome search, provide a window size.",
-                    "I.e., it is not possible to design X probes.",
-                ]
-            )
+            if isinstance(self.Ws, type(None)):
+                raise AssertionError(" ".join(
+                    [
+                        "During full-chromosome search, provide a window size.",
+                        "I.e., it is not possible to design X probes.",
+                    ]
+                ))
 
         if isinstance(self.X, int):
             self.Ws = (
@@ -332,7 +336,8 @@ class Walker(GenomicWindowSet):
 
     def _assert(self):
         GenomicWindowSet._assert(self)
-        assert os.path.isdir(self.out_path)
+        if not os.path.isdir(self.out_path):
+            raise AssertionError
 
     def start(self, *args, start_from_nt: int = 0, end_at_nt: int = -1, **kwargs):
         self._assert()
@@ -656,7 +661,8 @@ class Walker(GenomicWindowSet):
     @staticmethod
     def fprocess(oGroup, window, *args, **kwargs):
         opb = copy.copy(kwargs["opb"])
-        assert isinstance(opb, OligoProbeBuilder)
+        if not isinstance(opb, OligoProbeBuilder):
+            raise AssertionError
         logger = logging.getLogger(kwargs["loggerName"])
         probe_list = opb.start(oGroup, window, kwargs["cfr_step"], logger)
         reduced_probe_list = opb.reduce_probe_list(probe_list)
@@ -671,7 +677,8 @@ class Walker(GenomicWindowSet):
 
     @staticmethod
     def fpost(results, opath, *args, **kwargs):
-        assert isinstance(kwargs["opb"], OligoProbeBuilder)
+        if not isinstance(kwargs["opb"], OligoProbeBuilder):
+            raise AssertionError
         logger = logging.getLogger(kwargs["loggerName"])
         if len(results) == 0:
             logger.critical(f"Built {len(results)} oligo probe candidates")

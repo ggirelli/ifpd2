@@ -31,9 +31,10 @@ class DBMakeSettings(object):
 
     @output_path.setter
     def output_path(self, output_path: str) -> None:
-        assert not isdir(output_path) and not isfile(
+        if not (not isdir(output_path) and not isfile(
             output_path
-        ), f"'{output_path}' already exists"
+        )):
+            raise AssertionError(f"'{output_path}' already exists")
         self._output_path = output_path
 
     @property
@@ -42,7 +43,8 @@ class DBMakeSettings(object):
 
     @bin_size.setter
     def bin_size(self, bin_size: int) -> None:
-        assert bin_size >= 1
+        if bin_size < 1:
+            raise AssertionError
         self._bin_size = bin_size
 
     @property
@@ -58,7 +60,8 @@ class DBMakeSettings(object):
         return copy(self._secondary_structure_paths)
 
     def add_off_target_path(self, path: str) -> None:
-        assert isfile(path), f"'{path}' not found."
+        if not isfile(path):
+            raise AssertionError(f"'{path}' not found.")
         self._off_target_paths.add(path)
 
     def add_off_target_path_list(self, path_list: List[str]) -> None:
@@ -66,7 +69,8 @@ class DBMakeSettings(object):
             self.add_off_target_path(path)
 
     def add_melting_temperature_path(self, path: str) -> None:
-        assert isfile(path), f"'{path}' not found."
+        if not isfile(path):
+            raise AssertionError(f"'{path}' not found.")
         self._melting_temperature_paths.add(path)
 
     def add_melting_temperature_path_list(self, path_list: List[str]) -> None:
@@ -74,7 +78,8 @@ class DBMakeSettings(object):
             self.add_melting_temperature_path(path)
 
     def add_secondary_structure_path(self, path: str) -> None:
-        assert isfile(path), f"'{path}' not found."
+        if not isfile(path):
+            raise AssertionError(f"'{path}' not found.")
         self._secondary_structure_paths.add(path)
 
     def add_secondary_structure_path_list(self, path_list: List[str]) -> None:

@@ -19,9 +19,11 @@ class Folder:
 
     def __post_init__(self):
         if self.exists:
-            assert isdir(self.path)
+            if not isdir(self.path):
+                raise AssertionError
         else:
-            assert not path_exists(self.path)
+            if path_exists(self.path):
+                raise AssertionError
 
 
 @dataclass(frozen=True)
@@ -31,9 +33,11 @@ class File:
 
     def __post_init__(self):
         if self.exists:
-            assert isfile(self.path)
+            if not isfile(self.path):
+                raise AssertionError
         else:
-            assert not path_exists(self.path)
+            if path_exists(self.path):
+                raise AssertionError
 
 
 @dataclass(frozen=True)
@@ -41,7 +45,8 @@ class PositiveInteger:
     n: int
 
     def __post_init__(self):
-        assert self.n >= 1
+        if self.n < 1:
+            raise AssertionError
 
 
 @dataclass(frozen=True)
@@ -49,7 +54,8 @@ class NonNegativeFloat:
     n: float
 
     def __post_init__(self):
-        assert self.n >= 0
+        if self.n < 0:
+            raise AssertionError
 
 
 @dataclass(frozen=True)
@@ -57,7 +63,8 @@ class NonNegativeInteger:
     n: int
 
     def __post_init__(self):
-        assert self.n > 0
+        if self.n <= 0:
+            raise AssertionError
 
 
 @dataclass(frozen=True)
@@ -68,12 +75,15 @@ class PositiveFloat:
 
     def __post_init__(self):
         if self.limit is None:
-            assert 0 < self.n
+            if 0 >= self.n:
+                raise AssertionError
 
         elif self.limit_included:
-            assert 0 < self.n <= self.limit
+            if not 0 < self.n <= self.limit:
+                raise AssertionError
         else:
-            assert 0 < self.n < self.limit
+            if not 0 < self.n < self.limit:
+                raise AssertionError
 
 
 @dataclass(frozen=True)
@@ -82,8 +92,10 @@ class GenomicRegion:
     end: int
 
     def __post_init__(self):
-        assert self.start >= 0
-        assert self.end >= self.start or self.end == -1
+        if self.start < 0:
+            raise AssertionError
+        if not (self.end >= self.start or self.end == -1):
+            raise AssertionError
 
     def astuple(self) -> Tuple[int, int]:
         return (self.start, self.end)
@@ -95,8 +107,10 @@ class NonNegativeIntInterval:
     end: int
 
     def __post_init__(self):
-        assert self._from >= 0
-        assert self.end >= self.first
+        if self._from < 0:
+            raise AssertionError
+        if self.end < self.first:
+            raise AssertionError
 
     def astuple(self) -> Tuple[int, int]:
         return (self.start, self.end)
@@ -109,8 +123,10 @@ class QueryWindow:
 
     def __post_init__(self):
         if self.size is not None:
-            assert self.size >= 1
-        assert 0 < self.shift <= 1
+            if self.size < 1:
+                raise AssertionError
+        if not 0 < self.shift <= 1:
+            raise AssertionError
 
     def astuple(self) -> Tuple[Optional[int], Optional[float]]:
         return (self.size, self.shift)
@@ -122,8 +138,10 @@ class QueryFocus:
     step: float
 
     def __post_init__(self):
-        assert self.size > 0
-        assert self.step > 0
+        if self.size <= 0:
+            raise AssertionError
+        if self.step <= 0:
+            raise AssertionError
 
 
 @dataclass(frozen=True)
@@ -141,6 +159,9 @@ class GCRange:
     high: float
 
     def __post_init__(self):
-        assert 0 <= self.low <= 1
-        assert 0 <= self.high <= 1
-        assert self.low <= self.high
+        if not 0 <= self.low <= 1:
+            raise AssertionError
+        if not 0 <= self.high <= 1:
+            raise AssertionError
+        if self.low > self.high:
+            raise AssertionError

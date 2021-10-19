@@ -36,13 +36,16 @@ class GenomicRegion(object):
             chromStart {int} -- chromosome start position (usually 0)
             chromEnd {int} -- chromosome end position
         """
-        assert len(chrom) != 0, "chromosome cannot be empty"
-        assert (
-            chromStart >= 0
-        ), f"start should be greater than or equal to 0: {chromStart}"
-        assert (
-            chromEnd > chromStart
-        ), f"end should be greater than start: {chromStart}-{chromEnd}"
+        if len(chrom) == 0:
+            raise AssertionError("chromosome cannot be empty")
+        if (
+            chromStart < 0
+        ):
+            raise AssertionError(f"start should be greater than or equal to 0: {chromStart}")
+        if (
+            chromEnd <= chromStart
+        ):
+            raise AssertionError(f"end should be greater than start: {chromStart}-{chromEnd}")
         self.__chrom = chrom
         self.__chromStart = chromStart
         self.__chromEnd = chromEnd
@@ -58,9 +61,11 @@ class GenomicRegion(object):
             focus_style {float} -- focus region size in nt
                                    or as a fraction of the genomic region
         """
-        assert focus_style > 0
+        if focus_style <= 0:
+            raise AssertionError
         if focus_style > 1:
-            assert focus_style <= self.__chromEnd - self.__chromStart
+            if focus_style > self.__chromEnd - self.__chromStart:
+                raise AssertionError
             self.__focusSize = int(focus_style)
         else:
             self.__focusSize = int((self.__chromEnd - self.__chromStart) * focus_style)
@@ -76,7 +81,8 @@ class GenomicRegion(object):
             step_style {float} -- focus region growth step in nt
                                   or as a fraction of the focus region
         """
-        assert step_style > 0
+        if step_style <= 0:
+            raise AssertionError
         if step_style > 1:
             self.__focusStep = int(step_style)
         else:
@@ -161,8 +167,10 @@ class GenomicRegionBuilder(object):
         super(GenomicRegionBuilder, self).__init__()
         self.__chromosome = chromosome_data.name
         self.__chromosome_size_nt = chromosome_data.size_nt
-        assert focus_style > 0
-        assert focus_step_style > 0
+        if focus_style <= 0:
+            raise AssertionError
+        if focus_step_style <= 0:
+            raise AssertionError
         self.__focus_style = (focus_style, focus_step_style)
 
     def __build_overlapping(self, size: int, step: int) -> List[List[GenomicRegion]]:
@@ -178,7 +186,8 @@ class GenomicRegionBuilder(object):
         Returns:
             List[List[GenomicRegion]] -- generated region lists
         """
-        assert step < size
+        if step >= size:
+            raise AssertionError
         region_set_list: List[List[GenomicRegion]] = []
         for range_start in range(0, size, step):
             genomic_region_set: List[GenomicRegion] = []
@@ -205,7 +214,8 @@ class GenomicRegionBuilder(object):
         Returns:
             List[List[GenomicRegion]] -- generated region lists
         """
-        assert step == size
+        if step != size:
+            raise AssertionError
         genomic_region_set: List[GenomicRegion] = []
         for start in range(0, self.__chromosome_size_nt, step):
             end = start + size

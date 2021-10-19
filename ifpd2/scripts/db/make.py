@@ -100,10 +100,11 @@ def main(
     settings.bin_size = binsize
     settings.prefix = prefix
 
-    assert not (
+    if (
         len(settings.off_target_paths) == 0
         and len(settings.melting_temperature_paths) != 0
-    ), "please provide either --hush or --melting"
+    ):
+        raise AssertionError("please provide either --hush or --melting")
 
     os.mkdir(settings.output_path)
     dbdf = pd.DataFrame(columns=["name"])
@@ -219,9 +220,10 @@ def parse_record_headers(
         chromosome_list.append(f"{chromosome_prefix}{chromosome}")
         chromosome_length_set.add(len(f"{chromosome_prefix}{chromosome}"))
         start, end = [int(x) for x in extremes.split("-")]
-        assert (end - start) == len(
+        if (end - start) != len(
             record.sequence
-        ), f"{end - start} != {len(record.sequence)}"
+        ):
+            raise AssertionError(f"{end - start} != {len(record.sequence)}")
         start_list.append(start)
         end_list.append(end)
 

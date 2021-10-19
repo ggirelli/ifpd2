@@ -20,7 +20,8 @@ class ChromosomeIndex(object):
 
     def __init__(self, bin_size: int):
         super(ChromosomeIndex, self).__init__()
-        assert bin_size >= 1
+        if bin_size < 1:
+            raise AssertionError
         self._bin_size = bin_size
 
     def __init_index(self, chrom_db: pd.DataFrame) -> None:
@@ -63,7 +64,8 @@ class ChromosomeIndex(object):
         for i in range(chrom_db.shape[0]):
             track[0].update(track[1], advance=1)
             position_in_nt = chrom_db["start"].values[i]
-            assert position_in_nt > current_position
+            if position_in_nt <= current_position:
+                raise AssertionError
             current_position = position_in_nt
 
             position_in_bytes = record_byte_size * i
@@ -101,16 +103,19 @@ class ChromosomeIndex(object):
             track {Tuple[Progress, TaskID]} -- progress bar details
         """
         for colname in ("chromosome", "start", "end"):
-            assert colname in chrom_db.columns, f"missing '{colname}' column"
+            if colname not in chrom_db.columns:
+                raise AssertionError(f"missing '{colname}' column")
         chromosome_set: Set[bytes] = set(chrom_db["chromosome"].values)
-        assert len(chromosome_set) == 1
+        if len(chromosome_set) != 1:
+            raise AssertionError
 
         self.__init_index(chrom_db)
         self.__populate_bins(chrom_db, record_byte_size, track)
         self.__fill_empty_bins()
 
     def __getitem__(self, position_in_nt: int) -> int:
-        assert self._index is not None
+        if self._index is None:
+            raise AssertionError
         binned_to = position_in_nt // self._bin_size
         if binned_to not in self._index:
             return -1
@@ -145,12 +150,15 @@ class ChromosomeData(object):
     ):
         super(ChromosomeData, self).__init__()
 
-        assert "chromosome" in chromosome_db.columns
+        if "chromosome" not in chromosome_db.columns:
+            raise AssertionError
         selected_chrom = chromosome_db["chromosome"][0]
-        assert len(set(chromosome_db["chromosome"].values)) == 1
+        if len(set(chromosome_db["chromosome"].values)) != 1:
+            raise AssertionError
 
         self._record_byte_size = get_dtype_length(dtype)
-        assert self._record_byte_size > 0
+        if self._record_byte_size <= 0:
+            raise AssertionError
 
         self._name = selected_chrom
         self._recordno = chromosome_db.shape[0]
@@ -195,7 +203,8 @@ class ChromosomeData(object):
             index_bin_size {int} -- index bin size
             progress {Progress} -- progress instance for progress bar with rich
         """
-        assert index_bin_size > 0
+        if index_bin_size <= 0:
+            raise AssertionError
         indexing_track = progress.add_task(
             f"indexing {self._name.decode()}.bin",
             total=chromosome_db.shape[0],
@@ -226,7 +235,8 @@ class ChromosomeDict(object):
     def __init__(self, index_bin_size: int = const.DEFAULT_DATABASE_INDEX_BIN_SIZE):
         super(ChromosomeDict, self).__init__()
         self._data = {}
-        assert index_bin_size > 0
+        if index_bin_size <= 0:
+            raise AssertionError
         self._index_bin_size = index_bin_size
 
     def __len__(self) -> int:

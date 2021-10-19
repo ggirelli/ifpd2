@@ -10,7 +10,8 @@ from typing import List, Tuple
 
 
 def extract_kmers(input_path: str, kmer_size: int) -> List[Tuple[str, str]]:
-    assert isfile(input_path)
+    if not isfile(input_path):
+        raise AssertionError
     with open(input_path) as FH:
         oligos_list: List[Tuple[str, str]] = []
         for record_header, record_sequence in tqdm(
