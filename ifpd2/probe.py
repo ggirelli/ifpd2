@@ -564,14 +564,11 @@ class OligoProbeBuilder(OligoPathBuilder):
     def select_probe_from_pair(probeA, probeB):
         if probeA.size < probeB.size:
             return probeA
-        return probeB
         if np.diff(probeA.tm_range)[0] < np.diff(probeB.tm_range)[0]:
             return probeA
-        return probeB
         if probeA.spread / probeA.d_mean < probeB.spread / probeB.d_mean:
             return probeA
         return probeB
-        return probeA
 
     @staticmethod
     def import_probes(ipath):
