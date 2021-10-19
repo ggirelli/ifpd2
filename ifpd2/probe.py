@@ -567,16 +567,13 @@ class OligoProbeBuilder(OligoPathBuilder):
     def select_probe_from_pair(probeA, probeB):
         if probeA.size < probeB.size:
             return probeA
-        else:
-            return probeB
+        return probeB
         if np.diff(probeA.tm_range)[0] < np.diff(probeB.tm_range)[0]:
             return probeA
-        else:
-            return probeB
+        return probeB
         if probeA.spread / probeA.d_mean < probeB.spread / probeB.d_mean:
             return probeA
-        else:
-            return probeB
+        return probeB
         return probeA
 
     @staticmethod

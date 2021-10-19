@@ -189,8 +189,7 @@ class OligoGroup:
     def get_focused_oligos(self, onlyUsable=False):
         if onlyUsable:
             return self._data.loc[self.usable_oligos]
-        else:
-            return self._data.loc[self.oligos_in_focus_window, :]
+        return self._data.loc[self.oligos_in_focus_window, :]
 
     def get_n_focused_oligos(self, onlyUsable=False):
         if self.usable_oligos.sum() == 0:
