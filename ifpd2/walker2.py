@@ -156,7 +156,7 @@ class ChromosomeWalker(object):
     def walk_single_region(self, region: GenomicRegion) -> Iterator[List[Record]]:
         assert region.chromosome == self.__chromosome
         focus_start, focus_end = region.focus
-        record_list = [r for r in self.buffer(focus_start, focus_end)]
+        record_list = list(self.buffer(focus_start, focus_end))
         yield record_list
         while region.can_increase_focus():
             region.increase_focus()
@@ -164,9 +164,9 @@ class ChromosomeWalker(object):
             record_list = list(
                 itertools.chain(
                     *[
-                        [r for r in self.buffer(new_focus_start, focus_start)],
+                        list(self.buffer(new_focus_start, focus_start)),
                         record_list,
-                        [r for r in self.buffer(focus_end, new_focus_end)],
+                        list(self.buffer(focus_end, new_focus_end)),
                     ]
                 )
             )
