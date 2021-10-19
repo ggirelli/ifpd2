@@ -183,7 +183,8 @@ class OligoProbeSetBuilder(object):
             shutil.rmtree(out_path)
         os.mkdir(out_path)
 
-    def __build_probe_set_list(self, window_list, i):
+    @staticmethod
+    def __build_probe_set_list(window_list, i):
         probe_set_list = [(p,) for p in window_list[i]]
 
         for w in window_list[(i + 1) :]:

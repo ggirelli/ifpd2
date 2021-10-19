@@ -549,7 +549,8 @@ class OligoProbeBuilder(OligoPathBuilder):
             print(e)
             raise
 
-    def select_probe_from_pair(self, probeA, probeB):
+    @staticmethod
+    def select_probe_from_pair(probeA, probeB):
         if probeA.size < probeB.size:
             return probeA
         else:
