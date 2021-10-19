@@ -189,7 +189,7 @@ def main(
         region_set_list = RB.build_by_number(PositiveInteger(probes).n)
     else:
         window_size, window_shift = QueryWindow(window_size, window_shift).astuple()
-        if not (window_size is not None and window_shift is not None):
+        if window_size is None or window_shift is None:
             raise AssertionError
         region_set_list = RB.build_by_size(window_size, window_shift)
 
@@ -213,7 +213,7 @@ def check_input(
         window_shift = None
         window_size = None
 
-    if not (probes is not None or window_size is not None):
+    if probes is None and window_size is None:
         raise AssertionError
     if probes is not None and window_size is not None:
         logging.warning("cannot combine -X and -W. Using -X.")

@@ -324,7 +324,7 @@ class OligoGroup:
 
     def apply_threshold(self, threshold):
         # Unfocuses oligos with score higher than the threshold
-        if not (threshold <= 1 and threshold >= 0):
+        if threshold > 1 or threshold < 0:
             raise AssertionError
         self._oligos_passing_score_filter = self._data["score"] <= threshold
 
