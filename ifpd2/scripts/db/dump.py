@@ -59,9 +59,8 @@ def check_region(
         chrom_size = DB.chromosome_sizes_nt[chrom.encode()]
         if start >= chrom_size:
             raise AssertionError(f"{start} larger than chromosome size: {chrom_size}")
-        if end is not None:
-            if start >= end:
-                raise AssertionError("end location smaller than start")
+        if end is not None and start >= end:
+            raise AssertionError("end location smaller than start")
 
     return (
         chrom,
