@@ -582,7 +582,8 @@ class OligoProbeBuilder(OligoPathBuilder):
     @staticmethod
     def import_probes(ipath):
         # Imports output from given directory path
-        assert os.path.isdir(ipath)
+        if not os.path.isdir(ipath):
+            raise AssertionError
 
         pPath = os.path.join(ipath, "probe_paths.tsv")
         if not os.path.isfile(pPath):
@@ -603,7 +604,8 @@ class OligoProbeBuilder(OligoPathBuilder):
     @staticmethod
     def export_probes(probe_list, opath):
         # Exports a list of probes to a directory
-        assert os.path.isdir(opath)
+        if not os.path.isdir(opath):
+            raise AssertionError
 
         probe_df = pd.concat([p.featDF for p in probe_list], ignore_index=True)
         probe_df.sort_values("start", inplace=True)
