@@ -11,7 +11,7 @@ import os
 from typing import IO, Iterator, List, Union
 
 
-class ChromosomeWalker(object):
+class ChromosomeWalker:
     """docstring for Walker"""
 
     __chromosome: bytes

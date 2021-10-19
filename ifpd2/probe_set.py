@@ -15,7 +15,7 @@ from typing import List
 from ifpd2.probe import OligoProbe
 
 
-class OligoProbeSet(object):
+class OligoProbeSet:
     """Set of non-overlapping probes built from windows."""
 
     def __init__(self, probe_list):
@@ -172,7 +172,7 @@ class OligoProbeSet(object):
                     BH.write(f"{probe.data.iloc[i]['sequence']}\n")
 
 
-class OligoProbeSetBuilder(object):
+class OligoProbeSetBuilder:
     """Class to build OligoProbeSet objects."""
 
     probe_set_list: List = []

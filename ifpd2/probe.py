@@ -12,7 +12,7 @@ import shutil
 from ifpd2 import asserts as ass
 
 
-class OligoProbe(object):
+class OligoProbe:
     """Converts a DataFrame of oligo data into an OligoProbe."""
 
     def __init__(self, oligo_data):
@@ -133,7 +133,7 @@ class OligoProbe(object):
                 BH.write(f"{oligo['sequence']}\n")
 
 
-class OligoPathBuilder(object):
+class OligoPathBuilder:
     """OligoPathBuilder contains methods to select non-overlapping sets of
     oligos (i.e., probes) from an oligo DataFrame in input."""
 

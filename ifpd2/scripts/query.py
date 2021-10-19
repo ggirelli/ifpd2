@@ -246,7 +246,7 @@ def main(
     logging.shutdown()
 
 
-class QuerySettings(object):
+class QuerySettings:
     _db_folder: Folder
     _output_path: Folder
 

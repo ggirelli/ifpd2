@@ -12,7 +12,7 @@ from tqdm import tqdm  # type: ignore
 from typing import List, Tuple
 
 
-class Oligo(object):
+class Oligo:
     """Oligo database line/record parser.
     Presents oligo values as properties."""
 
@@ -126,7 +126,7 @@ class Oligo(object):
         self.data["score"] = np.mean([norm_nOT, norm_ss_dG])
 
 
-class OligoGroup(object):
+class OligoGroup:
     """Allows to select oligos from a group based on a "focus" window of
     interest. The window can be expanded to the closest oligo or to retain at
     least a given number of oligos."""

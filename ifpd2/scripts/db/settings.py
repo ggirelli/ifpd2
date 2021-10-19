@@ -10,7 +10,7 @@ from os.path import isdir, isfile
 from typing import Any, Dict, List, Set
 
 
-class DBMakeSettings(object):
+class DBMakeSettings:
     _output_path: str
     _off_target_paths: Set[str]
     _melting_temperature_paths: Set[str]
