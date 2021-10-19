@@ -31,7 +31,7 @@ class DBMakeSettings:
 
     @output_path.setter
     def output_path(self, output_path: str) -> None:
-        if not (not isdir(output_path) and not isfile(output_path)):
+        if isdir(output_path) or isfile(output_path):
             raise AssertionError(f"'{output_path}' already exists")
         self._output_path = output_path
 

@@ -181,7 +181,7 @@ def main(
         window_shift = 1.0
         window_size = None
 
-    if not (probes is not None or window_size is not None):
+    if probes is None and window_size is None:
         raise AssertionError
     if region[1] <= 0:
         probes = None

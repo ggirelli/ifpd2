@@ -18,12 +18,13 @@ class Folder:
     exists: bool = False
 
     def __post_init__(self):
-        if self.exists:
-            if not isdir(self.path):
-                raise AssertionError
-        else:
-            if path_exists(self.path):
-                raise AssertionError
+        if (
+            self.exists
+            and not isdir(self.path)
+            or not self.exists
+            and path_exists(self.path)
+        ):
+            raise AssertionError
 
 
 @dataclass(frozen=True)
@@ -32,12 +33,13 @@ class File:
     exists: bool = False
 
     def __post_init__(self):
-        if self.exists:
-            if not isfile(self.path):
-                raise AssertionError
-        else:
-            if path_exists(self.path):
-                raise AssertionError
+        if (
+            self.exists
+            and not isfile(self.path)
+            or not self.exists
+            and path_exists(self.path)
+        ):
+            raise AssertionError
 
 
 @dataclass(frozen=True)
@@ -75,15 +77,14 @@ class PositiveFloat:
 
     def __post_init__(self):
         if self.limit is None:
-            if 0 >= self.n:
+            if self.n <= 0:
                 raise AssertionError
 
         elif self.limit_included:
             if not 0 < self.n <= self.limit:
                 raise AssertionError
-        else:
-            if not 0 < self.n < self.limit:
-                raise AssertionError
+        elif not 0 < self.n < self.limit:
+            raise AssertionError
 
 
 @dataclass(frozen=True)
@@ -94,7 +95,7 @@ class GenomicRegion:
     def __post_init__(self):
         if self.start < 0:
             raise AssertionError
-        if not (self.end >= self.start or self.end == -1):
+        if self.end < self.start and self.end != -1:
             raise AssertionError
 
     def astuple(self) -> Tuple[int, int]:
@@ -122,9 +123,8 @@ class QueryWindow:
     shift: Optional[float]
 
     def __post_init__(self):
-        if self.size is not None:
-            if self.size < 1:
-                raise AssertionError
+        if self.size is not None and self.size < 1:
+            raise AssertionError
         if not 0 < self.shift <= 1:
             raise AssertionError
 

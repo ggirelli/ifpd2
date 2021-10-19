@@ -24,25 +24,22 @@ def ert_nonNeg(x, label, include_zero=False):
     if not include_zero:
         if x <= 0:
             raise AssertionError(f"{label} should be greater than 0")
-    else:
-        if x < 0:
-            raise AssertionError(f"{label} should be greater than or equal to 0")
+    elif x < 0:
+        raise AssertionError(f"{label} should be greater than or equal to 0")
 
 
 def ert_inInterv(x, vmin, vmax, label, leftClose=False, rightClose=True):
     if leftClose:
         if rightClose:
-            if not (x >= vmin and x <= vmax):
+            if x < vmin or x > vmax:
                 raise AssertionError(f"expected {vmin}<={label}<={vmax}")
-        else:
-            if not (x >= vmin and x < vmax):
-                raise AssertionError(f"expected {vmin}<={label}<{vmax}")
+        elif x < vmin or x >= vmax:
+            raise AssertionError(f"expected {vmin}<={label}<{vmax}")
     elif rightClose:
-        if not (x > vmin and x <= vmax):
+        if x <= vmin or x > vmax:
             raise AssertionError(f"expected {vmin}<{label}<={vmax}")
-    else:
-        if not (x > vmin and x < vmax):
-            raise AssertionError(f"expected {vmin}<{label}<{vmax}")
+    elif x <= vmin or x >= vmax:
+        raise AssertionError(f"expected {vmin}<{label}<{vmax}")
 
 
 def ert_in_dtype(x, dtype):
