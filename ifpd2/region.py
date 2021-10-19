@@ -38,14 +38,14 @@ class GenomicRegion:
         """
         if len(chrom) == 0:
             raise AssertionError("chromosome cannot be empty")
-        if (
-            chromStart < 0
-        ):
-            raise AssertionError(f"start should be greater than or equal to 0: {chromStart}")
-        if (
-            chromEnd <= chromStart
-        ):
-            raise AssertionError(f"end should be greater than start: {chromStart}-{chromEnd}")
+        if chromStart < 0:
+            raise AssertionError(
+                f"start should be greater than or equal to 0: {chromStart}"
+            )
+        if chromEnd <= chromStart:
+            raise AssertionError(
+                f"end should be greater than start: {chromStart}-{chromEnd}"
+            )
         self.__chrom = chrom
         self.__chromStart = chromStart
         self.__chromEnd = chromEnd

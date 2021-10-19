@@ -48,20 +48,24 @@ def ert_inInterv(x, vmin, vmax, label, leftClose=False, rightClose=True):
 def ert_in_dtype(x, dtype):
     if dtype.startswith("f"):
         if x > np.finfo(dtype).max:
-            raise AssertionError(" ".join(
-                [
-                    "expected to be lower than {dtype} max:",
-                    f"{x} < {np.finfo(dtype).max}",
-                ]
-            ))
+            raise AssertionError(
+                " ".join(
+                    [
+                        "expected to be lower than {dtype} max:",
+                        f"{x} < {np.finfo(dtype).max}",
+                    ]
+                )
+            )
     elif dtype.startswith("u") or dtype.startswith("i"):
         if x > np.iinfo(dtype).max:
-            raise AssertionError(" ".join(
-                [
-                    "expected to be lower than {dtype} max:",
-                    f"{x} < {np.iinfo(dtype).max}",
-                ]
-            ))
+            raise AssertionError(
+                " ".join(
+                    [
+                        "expected to be lower than {dtype} max:",
+                        f"{x} < {np.iinfo(dtype).max}",
+                    ]
+                )
+            )
     else:
         logging.warning(f"assert not implemented for dtype '{dtype}'")
 

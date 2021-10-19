@@ -5,7 +5,14 @@
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
-dtype_melting = {"name": "|S", "Tm_dG": "<f4", "Tm_dH": "<f4", "Tm_dS": "<f4", "Tm": "<f4", "sequence": "|S"}
+dtype_melting = {
+    "name": "|S",
+    "Tm_dG": "<f4",
+    "Tm_dH": "<f4",
+    "Tm_dS": "<f4",
+    "Tm": "<f4",
+    "sequence": "|S",
+}
 dtype_hush = {"sequence": "|S", "off_target_no": "<u4"}
 dtype_secondary = {"ss_dG": "<f4"}
 dtype_sequence_features = {"sequence": "|S", "gc_content": "<f4"}

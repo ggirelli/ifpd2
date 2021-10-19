@@ -220,9 +220,7 @@ def parse_record_headers(
         chromosome_list.append(f"{chromosome_prefix}{chromosome}")
         chromosome_length_set.add(len(f"{chromosome_prefix}{chromosome}"))
         start, end = [int(x) for x in extremes.split("-")]
-        if (end - start) != len(
-            record.sequence
-        ):
+        if (end - start) != len(record.sequence):
             raise AssertionError(f"{end - start} != {len(record.sequence)}")
         start_list.append(start)
         end_list.append(end)

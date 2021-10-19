@@ -51,10 +51,10 @@ def check_region(
     end: Optional[int] = None,
 ) -> Tuple[Optional[str], int, int]:
     if chrom is None:
-        if not (
-            start is None and end is None
-        ):
-            raise AssertionError("cannot use --region-start or --region-end without --chrom")
+        if not (start is None and end is None):
+            raise AssertionError(
+                "cannot use --region-start or --region-end without --chrom"
+            )
     elif start is not None:
         chrom_size = DB.chromosome_sizes_nt[chrom.encode()]
         if start >= chrom_size:
