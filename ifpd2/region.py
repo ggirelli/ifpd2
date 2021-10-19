@@ -256,5 +256,4 @@ class GenomicRegionBuilder:
         step = int(step_style) if step_style > 1 else int(size * step_style)
         if step < size:
             return self.__build_overlapping(size, step)
-        else:
-            return self.__build_non_overlapping(size, step)
+        return self.__build_non_overlapping(size, step)
