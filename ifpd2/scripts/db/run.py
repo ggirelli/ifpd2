@@ -14,6 +14,7 @@ from ifpd2.scripts.db import check, dump, info, make
     help="Tools to manage ifpd2 databases.",
 )
 def main() -> None:
+    '''Just a hook for the entry point. Silence is golden!'''
     pass
 
 
