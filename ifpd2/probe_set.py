@@ -216,8 +216,7 @@ class OligoProbeSetBuilder:
             if not non_empty_ids:
                 logging.warning(f"No probe candidates found, dropped. [ws{wSet+1}]")
                 continue
-            else:
-                i = non_empty_ids[0]
+            i = non_empty_ids[0]
 
             probe_set_list = self.__build_probe_set_list(window_list, i)
 
