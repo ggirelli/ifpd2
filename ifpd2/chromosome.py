@@ -103,7 +103,7 @@ class ChromosomeIndex(object):
         for colname in ("chromosome", "start", "end"):
             assert colname in chrom_db.columns, f"missing '{colname}' column"
         chromosome_set: Set[bytes] = set(chrom_db["chromosome"].values)
-        assert 1 == len(chromosome_set)
+        assert len(chromosome_set) == 1
 
         self.__init_index(chrom_db)
         self.__populate_bins(chrom_db, record_byte_size, track)
@@ -147,7 +147,7 @@ class ChromosomeData(object):
 
         assert "chromosome" in chromosome_db.columns
         selected_chrom = chromosome_db["chromosome"][0]
-        assert 1 == len(set(chromosome_db["chromosome"].values))
+        assert len(set(chromosome_db["chromosome"].values)) == 1
 
         self._record_byte_size = get_dtype_length(dtype)
         assert self._record_byte_size > 0

@@ -158,7 +158,7 @@ class GenomicWindowSet(object):
     def __mk_all_window_sets(self):
         # Prepare all window sets in a region of interest
         window_starts = np.floor(np.arange(self.S, self.E, self.Ws)).astype("i")
-        if 0 != (self.E - self.S) % self.Ws or len(window_starts) != 1:
+        if (self.E - self.S) % self.Ws != 0 or len(window_starts) != 1:
             window_starts = window_starts[:-1]
 
         window_mids = (window_starts + self.Ws / 2).reshape((window_starts.shape[0], 1))

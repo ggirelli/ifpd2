@@ -36,7 +36,7 @@ class GenomicRegion(object):
             chromStart {int} -- chromosome start position (usually 0)
             chromEnd {int} -- chromosome end position
         """
-        assert 0 != len(chrom), "chromosome cannot be empty"
+        assert len(chrom) != 0, "chromosome cannot be empty"
         assert (
             chromStart >= 0
         ), f"start should be greater than or equal to 0: {chromStart}"
