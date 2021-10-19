@@ -51,7 +51,7 @@ def check_region(
     end: Optional[int] = None,
 ) -> Tuple[Optional[str], int, int]:
     if chrom is None:
-        if not (start is None and end is None):
+        if start is not None or end is not None:
             raise AssertionError(
                 "cannot use --region-start or --region-end without --chrom"
             )

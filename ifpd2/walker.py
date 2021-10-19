@@ -526,11 +526,8 @@ class Walker(GenomicWindowSet):
                 wid = int(self.current_window["w"])
                 self.__walk_results[sid][wid] = self.fimport(self.window_path)
                 return
-            shutil.rmtree(self.window_path)
-            os.mkdir(self.window_path)
-        else:
-            shutil.rmtree(self.window_path)
-            os.mkdir(self.window_path)
+        shutil.rmtree(self.window_path)
+        os.mkdir(self.window_path)
 
     def _preprocess_window(self):
         # Preprocess current window

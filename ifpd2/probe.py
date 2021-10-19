@@ -28,7 +28,7 @@ class OligoProbe:
         if not isinstance(oligo_data, pd.DataFrame):
             raise AssertionError
         required_columns = ["start", "end", "Tm"]
-        if not all(col in oligo_data.columns for col in required_columns):
+        if any(col not in oligo_data.columns for col in required_columns):
             raise AssertionError
         self._data = oligo_data
         self._range = (self._data["start"].min(), self._data["end"].max())
@@ -340,17 +340,16 @@ class OligoProbeBuilder(OligoPathBuilder):
             ass.ert_type(self.Gs[i], float, f"Gs[{i}]")
             if self.Gs[i] > 1:
                 raise AssertionError
-        if not (all(np.array(self.Gs) < 0) or all(np.array(self.Gs) >= 0)):
+        if not all(np.array(self.Gs) < 0) and not all(np.array(self.Gs) >= 0):
             raise AssertionError
         if self.Gs[0] >= 0:
             if self.Gs[1] < self.Gs[0]:
                 raise AssertionError
-        else:
-            if self.Gs[1] > self.Gs[0]:
-                raise AssertionError
+        elif self.Gs[1] > self.Gs[0]:
+            raise AssertionError
 
         ass.ert_type(self.Ot, float, "Ot")
-        if not (self.Ot > 0 and self.Ot <= 1):
+        if self.Ot <= 0 or self.Ot > 1:
             raise AssertionError
 
     def get_prologue(self):
