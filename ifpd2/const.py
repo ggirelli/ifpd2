@@ -5,37 +5,11 @@
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
-dtype_melting = dict(
-    [
-        ("name", "|S"),
-        ("Tm_dG", "<f4"),
-        ("Tm_dH", "<f4"),
-        ("Tm_dS", "<f4"),
-        ("Tm", "<f4"),
-        ("sequence", "|S"),
-    ]
-)
-dtype_hush = dict(
-    [
-        ("sequence", "|S"),
-        ("off_target_no", "<u4"),
-    ]
-)
-dtype_secondary = dict([("ss_dG", "<f4")])
-dtype_sequence_features = dict(
-    [
-        ("sequence", "|S"),
-        ("gc_content", "<f4"),
-    ]
-)
-dtype_header_features = dict(
-    [
-        ("name", "|S"),
-        ("chromosome", "|S"),
-        ("start", "<u4"),
-        ("end", "<u4"),
-    ]
-)
+dtype_melting = {"name": "|S", "Tm_dG": "<f4", "Tm_dH": "<f4", "Tm_dS": "<f4", "Tm": "<f4", "sequence": "|S"}
+dtype_hush = {"sequence": "|S", "off_target_no": "<u4"}
+dtype_secondary = {"ss_dG": "<f4"}
+dtype_sequence_features = {"sequence": "|S", "gc_content": "<f4"}
+dtype_header_features = {"name": "|S", "chromosome": "|S", "start": "<u4", "end": "<u4"}
 
 DEFAULT_DATABASE_INDEX_BIN_SIZE = 100000
 
