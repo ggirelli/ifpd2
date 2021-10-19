@@ -31,14 +31,13 @@ def test_db_make():
     )
     if b"Error" in script_output:
         raise AssertionError
-    with open("test_data/test_db/chr16.bin", "rb").read() as test_db:
-        with open("test_db/chr16.bin", "rb").read() as new_db:
-            if test_db != new_db:
-                raise AssertionError
-            test_pickle = pickle.load(open("test_data/test_db/db.pickle", "rb"))
-            new_pickle = pickle.load(open("test_db/db.pickle", "rb"))
-            if test_pickle != new_pickle:
-                raise AssertionError
+    with open("test_data/test_db/chr16.bin", "rb").read() as test_db, open("test_db/chr16.bin", "rb").read() as new_db:
+        if test_db != new_db:
+            raise AssertionError
+        test_pickle = pickle.load(open("test_data/test_db/db.pickle", "rb"))
+        new_pickle = pickle.load(open("test_db/db.pickle", "rb"))
+        if test_pickle != new_pickle:
+            raise AssertionError
 
 
 def test_db_check():
