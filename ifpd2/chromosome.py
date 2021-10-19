@@ -227,7 +227,8 @@ class ChromosomeData:
 
 class ChromosomeDict:
     """Wraps ChromosomeData instances into a dictionary
-    and allow easier access to their attributes."""
+    and allow easier access to their attributes.
+    """
 
     _index_bin_size: int
     _data: Dict[bytes, ChromosomeData]

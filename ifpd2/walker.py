@@ -126,12 +126,14 @@ class GenomicWindowSet:
             os.mkdir(os.path.join(self.out_path, "window_sets"))
 
         if self.S == self.E and isinstance(self.Ws, type(None)):
-            raise AssertionError(" ".join(
-                [
-                    "During full-chromosome search, provide a window size.",
-                    "I.e., it is not possible to design X probes.",
-                ]
-            ))
+            raise AssertionError(
+                " ".join(
+                    [
+                        "During full-chromosome search, provide a window size.",
+                        "I.e., it is not possible to design X probes.",
+                    ]
+                )
+            )
 
         if isinstance(self.X, int):
             self.Ws = (
@@ -252,7 +254,8 @@ class GenomicWindowSet:
 class Walker(GenomicWindowSet):
     """Walker walks through the oligos stored in an ifpd2 database,
     assigns them to windows based on user-defined parameters, and then builds
-    probe candidates."""
+    probe candidates.
+    """
 
     out_path = "."
     reuse = False

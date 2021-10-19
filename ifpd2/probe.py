@@ -135,7 +135,8 @@ class OligoProbe:
 
 class OligoPathBuilder:
     """OligoPathBuilder contains methods to select non-overlapping sets of
-    oligos (i.e., probes) from an oligo DataFrame in input."""
+    oligos (i.e., probes) from an oligo DataFrame in input.
+    """
 
     N = int(48)  # Number of oligos per probe
     D: int = int(2)  # Minimum distance between consecutive oligos

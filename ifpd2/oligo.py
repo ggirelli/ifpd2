@@ -14,7 +14,8 @@ from typing import List, Tuple
 
 class Oligo:
     """Oligo database line/record parser.
-    Presents oligo values as properties."""
+    Presents oligo values as properties.
+    """
 
     _data = None
 
@@ -129,7 +130,8 @@ class Oligo:
 class OligoGroup:
     """Allows to select oligos from a group based on a "focus" window of
     interest. The window can be expanded to the closest oligo or to retain at
-    least a given number of oligos."""
+    least a given number of oligos.
+    """
 
     _focus_window = None  # Left-close, right-open
     _oligos_in_focus_window = None
