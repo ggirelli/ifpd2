@@ -73,10 +73,10 @@ class Record:
         off_target_no = self._data["off_target_no"]
         if off_target_no <= F[0]:
             self._data["score"] = 0
-            return
+            return None
         if off_target_no > F[1]:
             self._data["score"] = np.inf
-            return
+            return None
         return self.__norm_value_in_range(off_target_no, F)
 
     def __update_score_by_dG_Tm(self, Gs):
@@ -111,6 +111,7 @@ class Record:
         if norm_ss_dG is None:
             return None
         self._data["score"] = np.mean([norm_nOT, norm_ss_dG])
+        return None
 
     def __getitem__(self, key: str) -> Any:
         allowed_columns = ["score", *const.database_columns]
