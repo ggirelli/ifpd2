@@ -244,15 +244,15 @@ class ChromosomeDict(object):
 
     @property
     def sizes_nt(self) -> Dict[bytes, int]:
-        return dict([(name, data.size_nt) for name, data in self._data.items()])
+        return {name: data.size_nt for name, data in self._data.items()}
 
     @property
     def sizes_bytes(self) -> Dict[bytes, int]:
-        return dict([(name, data.size_bytes) for name, data in self._data.items()])
+        return {name: data.size_bytes for name, data in self._data.items()}
 
     @property
     def recordnos(self) -> Dict[bytes, int]:
-        return dict([(name, data.recordno) for name, data in self._data.items()])
+        return {name: data.recordno for name, data in self._data.items()}
 
     def get_chromosome(self, chromosome: bytes) -> ChromosomeData:
         return copy.copy(self._data[chromosome])
