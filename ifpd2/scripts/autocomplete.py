@@ -54,10 +54,8 @@ def main(shell_type: str, regenerate: bool) -> None:
 def regenerate_autocompletion_files(shell_type: str, autocomplete_path: str) -> None:
     if not shell_type in SHELL_TYPES:
         raise AssertionError(f"unrecognized shell type '{shell_type}'.")
-    cmd = shlex.quote(
-        f"_IFPD2_COMPLETE={shell_type}_source ifpd2 > {autocomplete_path}"
-    )
-    os.system(cmd)
+    cmd = f"_IFPD2_COMPLETE={shell_type}_source ifpd2 > {autocomplete_path}"
+    os.system(shlex.quote(cmd))
     print(f"Regenerated {shell_type} completion file: {autocomplete_path}")
 
 
