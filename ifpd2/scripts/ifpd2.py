@@ -24,6 +24,7 @@ Another iFISH probe design pipeline (II).""",
 )
 @click.version_option(__version__)
 def main():
+    '''Just a hook for the entry point. Silence is golden!'''
     pass
 
 
