@@ -37,7 +37,8 @@ class Oligo(object):
     def __init__(self, oligo, i):
         super(Oligo, self).__init__()
         ass.ert_type(i, int, "oligo id")
-        assert i >= 0
+        if i < 0:
+            raise AssertionError
         self._raw_data = oligo.strip().split("\t")
         for i in [2, 3, 9, 10]:
             self._raw_data[i] = int(self._raw_data[i])
@@ -155,8 +156,10 @@ class OligoGroup(object):
     @focus_window.setter
     def focus_window(self, focus_window):
         ass.ert_type(focus_window, tuple, "focus window")
-        assert len(focus_window) == 2
-        assert focus_window[1] > focus_window[0]
+        if len(focus_window) != 2:
+            raise AssertionError
+        if focus_window[1] <= focus_window[0]:
+            raise AssertionError
         self._focus_window = focus_window
 
     @property
@@ -222,7 +225,8 @@ class OligoGroup(object):
 
     def expand_focus_to_n_oligos(self, n, verbose=True):
         # Expand the sub-window of interest to retrieve at least n oligos
-        assert not isinstance(self.focus_window, type(None))
+        if isinstance(self.focus_window, type(None)):
+            raise AssertionError
 
         if n <= self.get_n_focused_oligos():
             return
@@ -245,7 +249,8 @@ class OligoGroup(object):
 
     def expand_focus_by_step(self, step, verbose=True):
         # Expand the current focus window of a given step (in nt)
-        assert step < 0
+        if step >= 0:
+            raise AssertionError
 
         if (
             self.focus_window[0] <= self._data["start"].min()
@@ -318,7 +323,8 @@ class OligoGroup(object):
 
     def apply_threshold(self, threshold):
         # Unfocuses oligos with score higher than the threshold
-        assert threshold <= 1 and threshold >= 0
+        if not (threshold <= 1 and threshold >= 0):
+            raise AssertionError
         self._oligos_passing_score_filter = self._data["score"] <= threshold
 
     def reset_threshold(self):

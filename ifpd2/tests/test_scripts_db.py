@@ -29,13 +29,16 @@ def test_db_make():
             "chr",
         ]
     )
-    assert b"Error" not in script_output
+    if b"Error" in script_output:
+        raise AssertionError
     test_db = open("test_data/test_db/chr16.bin", "rb").read()
     new_db = open("test_db/chr16.bin", "rb").read()
-    assert test_db == new_db
+    if test_db != new_db:
+        raise AssertionError
     test_pickle = pickle.load(open("test_data/test_db/db.pickle", "rb"))
     new_pickle = pickle.load(open("test_db/db.pickle", "rb"))
-    assert test_pickle == new_pickle
+    if test_pickle != new_pickle:
+        raise AssertionError
 
 
 def test_db_check():
@@ -47,7 +50,8 @@ def test_db_check():
             "test_db",
         ]
     )
-    assert b"Error" not in script_output, script_output
+    if b"Error" in script_output:
+        raise AssertionError(script_output)
 
 
 def test_db_dump():
@@ -60,7 +64,8 @@ def test_db_dump():
         ]
     )
     test_dump = open("test_data/test.dump.txt", "rb").read()
-    assert script_output == test_dump
+    if script_output != test_dump:
+        raise AssertionError
 
 
 def test_db_info():
@@ -72,7 +77,8 @@ def test_db_info():
             "test_db",
         ]
     )
-    assert b"Error" not in script_output
+    if b"Error" in script_output:
+        raise AssertionError
 
 
 def test_cleanup():

@@ -70,7 +70,8 @@ def autocomplete_fish(user_home_path: str, autocomplete_path: str) -> None:
 def autocomplete_bash_or_zsh(
     user_home_path: str, autocomplete_path: str, shell_type: str = "bash"
 ) -> None:
-    assert shell_type in {"bash", "zsh"}
+    if shell_type not in {"bash", "zsh"}:
+        raise AssertionError
 
     autocompletion_string = f". {autocomplete_path} # IFPD2-AUTOCOMPLETE\n"
     run_command_path = os.path.join(user_home_path, f".{shell_type}rc")

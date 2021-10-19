@@ -25,9 +25,11 @@ class OligoProbe(object):
 
     @data.setter
     def data(self, oligo_data):
-        assert isinstance(oligo_data, pd.DataFrame)
+        if not isinstance(oligo_data, pd.DataFrame):
+            raise AssertionError
         required_columns = ["start", "end", "Tm"]
-        assert all(col in oligo_data.columns for col in required_columns)
+        if not all(col in oligo_data.columns for col in required_columns):
+            raise AssertionError
         self._data = oligo_data
         self._range = (self._data["start"].min(), self._data["end"].max())
         self._size = self._range[1] - self._range[0]
@@ -108,7 +110,8 @@ class OligoProbe(object):
         return np.intersect1d(self.path, probe.path).shape[0]
 
     def export(self, path):
-        assert not os.path.isfile(path)
+        if os.path.isfile(path):
+            raise AssertionError
         if os.path.isdir(path):
             shutil.rmtree(path)
         os.mkdir(path)
@@ -155,7 +158,8 @@ class OligoPathBuilder(object):
         ass.ert_nonNeg(self.Tr, "Tr")
 
         ass.ert_type(self.Ps, int, "Ps")
-        assert self.Ps > 1
+        if self.Ps <= 1:
+            raise AssertionError
 
         ass.ert_type(self.Ph, float, "Ph")
         ass.ert_inInterv(self.Ph, 0, 1, "Ph")
@@ -318,28 +322,38 @@ class OligoProbeBuilder(OligoPathBuilder):
         if not isinstance(self.k, type(None)):
             ass.ert_type(self.k, int, "k")
             ass.ert_nonNeg(self.k, "k")
-            assert (self.k + self.D) * self.N <= self.Ps
+            if (self.k + self.D) * self.N > self.Ps:
+                raise AssertionError
 
         ass.ert_type(self.F, list, "F")
-        assert len(self.F) == 2
+        if len(self.F) != 2:
+            raise AssertionError
         for i in range(2):
             ass.ert_type(self.F[i], int, f"F[{i}]")
-            assert self.F[i] >= 0
-        assert self.F[1] >= self.F[0]
+            if self.F[i] < 0:
+                raise AssertionError
+        if self.F[1] < self.F[0]:
+            raise AssertionError
 
         ass.ert_type(self.Gs, list, "Gs")
-        assert len(self.Gs) == 2
+        if len(self.Gs) != 2:
+            raise AssertionError
         for i in range(2):
             ass.ert_type(self.Gs[i], float, f"Gs[{i}]")
-            assert self.Gs[i] <= 1
-        assert all(np.array(self.Gs) < 0) or all(np.array(self.Gs) >= 0)
+            if self.Gs[i] > 1:
+                raise AssertionError
+        if not (all(np.array(self.Gs) < 0) or all(np.array(self.Gs) >= 0)):
+            raise AssertionError
         if self.Gs[0] >= 0:
-            assert self.Gs[1] >= self.Gs[0]
+            if self.Gs[1] < self.Gs[0]:
+                raise AssertionError
         else:
-            assert self.Gs[1] <= self.Gs[0]
+            if self.Gs[1] > self.Gs[0]:
+                raise AssertionError
 
         ass.ert_type(self.Ot, float, "Ot")
-        assert self.Ot > 0 and self.Ot <= 1
+        if not (self.Ot > 0 and self.Ot <= 1):
+            raise AssertionError
 
     def get_prologue(self):
         s = "* OligoProbeBuilder *\n\n"

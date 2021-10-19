@@ -28,7 +28,8 @@ class OligoProbeSet(object):
 
     @probe_list.setter
     def probe_list(self, probe_list):
-        assert all(isinstance(p, OligoProbe) for p in probe_list)
+        if not all(isinstance(p, OligoProbe) for p in probe_list):
+            raise AssertionError
         self._probe_list = sorted(probe_list, key=lambda p: p.range[0])
         self._probe_tm_ranges = [p.tm_range for p in self.probe_list]
         self._tm_range = (
@@ -141,7 +142,8 @@ class OligoProbeSet(object):
         return df
 
     def export(self, path):
-        assert not os.path.isfile(path)
+        if os.path.isfile(path):
+            raise AssertionError
         if os.path.isdir(path):
             shutil.rmtree(path)
         os.mkdir(path)
@@ -177,7 +179,8 @@ class OligoProbeSetBuilder(object):
 
     def __init__(self, out_path):
         super(OligoProbeSetBuilder, self).__init__()
-        assert not os.path.isfile(out_path)
+        if os.path.isfile(out_path):
+            raise AssertionError
         self.out_path = out_path
         if os.path.isdir(out_path):
             shutil.rmtree(out_path)

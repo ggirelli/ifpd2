@@ -189,7 +189,8 @@ def main(
         region_set_list = RB.build_by_number(PositiveInteger(probes).n)
     else:
         window_size, window_shift = QueryWindow(window_size, window_shift).astuple()
-        assert window_size is not None and window_shift is not None
+        if not (window_size is not None and window_shift is not None):
+            raise AssertionError
         region_set_list = RB.build_by_size(window_size, window_shift)
 
     walker = ChromosomeWalker(DB, chromosome.encode())
@@ -212,7 +213,8 @@ def check_input(
         window_shift = None
         window_size = None
 
-    assert probes is not None or window_size is not None
+    if not (probes is not None or window_size is not None):
+        raise AssertionError
     if probes is not None and window_size is not None:
         logging.warning("cannot combine -X and -W. Using -X.")
         window_size = None
@@ -253,5 +255,7 @@ def assert_reusable(output_path: str):
             f"Provided path '{output_path}'",
         ]
     )
-    assert not isfile(output_path), assert_msg + " leads to a file"
-    assert not isdir(output_path), assert_msg + " leads to a directory."
+    if isfile(output_path):
+        raise AssertionError(assert_msg + " leads to a file")
+    if isdir(output_path):
+        raise AssertionError(assert_msg + " leads to a directory.")

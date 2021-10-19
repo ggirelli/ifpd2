@@ -181,7 +181,8 @@ def main(
         window_shift = 1.0
         window_size = None
 
-    assert probes is not None or window_size is not None
+    if not (probes is not None or window_size is not None):
+        raise AssertionError
     if region[1] <= 0:
         probes = None
         logging.info(
@@ -275,5 +276,7 @@ def assert_reusable(output_path: str):
             f"Provided path '{output_path}'",
         ]
     )
-    assert not isfile(output_path), assert_msg + " leads to a file"
-    assert not isdir(output_path), assert_msg + " leads to a directory."
+    if isfile(output_path):
+        raise AssertionError(assert_msg + " leads to a file")
+    if isdir(output_path):
+        raise AssertionError(assert_msg + " leads to a directory.")
