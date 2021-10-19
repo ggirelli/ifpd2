@@ -6,6 +6,7 @@
 import click  # type: ignore
 import os
 from rich import print  # type: ignore
+import shlex
 from shutil import copyfile
 import sys
 
@@ -13,12 +14,15 @@ from ifpd2 import __path__, __version__
 from ifpd2.const import CONTEXT_SETTINGS
 
 
+SHELL_TYPES = ("bash", "zsh", "fish")
+
+
 @click.command(context_settings=CONTEXT_SETTINGS)
 @click.option(
     "--shell-type",
     "-s",
     help="shell type for which to activate autocompletion",
-    type=click.Choice(["bash", "zsh", "fish"], case_sensitive=False),
+    type=click.Choice(SHELL_TYPES, case_sensitive=False),
     default="bash",
     show_default=True,
 )
@@ -48,6 +52,9 @@ def main(shell_type: str, regenerate: bool) -> None:
 
 
 def regenerate_autocompletion_files(shell_type: str, autocomplete_path: str) -> None:
+    if not shell_type in SHELL_TYPES:
+        raise AssertionError(f"unrecognized shell type '{shell_type}'.")
+    autocomplete_path = shlex.quote(autocomplete_path)
     os.system(f"_IFPD2_COMPLETE={shell_type}_source ifpd2 > {autocomplete_path}")
     print(f"Regenerated {shell_type} completion file: {autocomplete_path}")
 
