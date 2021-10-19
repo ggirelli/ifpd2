@@ -155,7 +155,7 @@ class OligoGroup(object):
     @focus_window.setter
     def focus_window(self, focus_window):
         ass.ert_type(focus_window, tuple, "focus window")
-        assert 2 == len(focus_window)
+        assert len(focus_window) == 2
         assert focus_window[1] > focus_window[0]
         self._focus_window = focus_window
 
@@ -245,7 +245,7 @@ class OligoGroup(object):
 
     def expand_focus_by_step(self, step, verbose=True):
         # Expand the current focus window of a given step (in nt)
-        assert 0 < step
+        assert step < 0
 
         if (
             self.focus_window[0] <= self._data["start"].min()

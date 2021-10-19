@@ -321,14 +321,14 @@ class OligoProbeBuilder(OligoPathBuilder):
             assert (self.k + self.D) * self.N <= self.Ps
 
         ass.ert_type(self.F, list, "F")
-        assert 2 == len(self.F)
+        assert len(self.F) == 2
         for i in range(2):
             ass.ert_type(self.F[i], int, f"F[{i}]")
             assert self.F[i] >= 0
         assert self.F[1] >= self.F[0]
 
         ass.ert_type(self.Gs, list, "Gs")
-        assert 2 == len(self.Gs)
+        assert len(self.Gs) == 2
         for i in range(2):
             ass.ert_type(self.Gs[i], float, f"Gs[{i}]")
             assert self.Gs[i] <= 1
@@ -457,7 +457,7 @@ class OligoProbeBuilder(OligoPathBuilder):
         if max_score == 0 and nOligos_prev_score_thr == 0:
             return []
 
-        while 0 == nOligos_prev_score_thr and score_thr <= max_score - self.Ot:
+        while nOligos_prev_score_thr == 0 and score_thr <= max_score - self.Ot:
             score_thr += self.Ot
             oGroup.apply_threshold(score_thr)
             nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
