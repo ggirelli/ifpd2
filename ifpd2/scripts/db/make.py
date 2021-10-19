@@ -172,7 +172,7 @@ def reduce_sequence_columns(df: pd.DataFrame) -> pd.DataFrame:
     if len(seq_columns) == 1:
         return df
     df.drop(seq_columns[1:], axis=1, inplace=True)
-    df.rename(columns=dict([(seq_columns[0], "sequence")]), inplace=True)
+    df.rename(columns={seq_columns[0]: "sequence"}, inplace=True)
     return df
 
 
