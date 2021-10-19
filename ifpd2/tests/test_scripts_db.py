@@ -8,7 +8,7 @@ import pickle
 
 
 def remove_test_db():
-    subprocess.run(["rm", "-r", "test_db"])
+    subprocess.run(["rm", "-r", "test_db"], check=True)
 
 
 def test_db_make():
