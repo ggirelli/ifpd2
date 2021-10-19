@@ -84,32 +84,32 @@ class Record:
         tm_dG = self._data["Tm_dG"]
         if ss_dG >= tm_dG * min(Gs):
             self._data["score"] = 0
-            return
+            return None
         if ss_dG < tm_dG * max(Gs):
             self._data["score"] = np.inf
-            return
+            return None
         return self.__norm_value_in_range(ss_dG, [tm_dG * f for f in Gs])
 
     def __update_score_by_dG_Gs(self, Gs):
         ss_dG = self._data["ss_dG"]
         if ss_dG >= Gs[0]:
             self._data["score"] = 0
-            return
+            return None
         if ss_dG < Gs[1]:
             self._data["score"] = np.inf
-            return
+            return None
         return self.__norm_value_in_range(ss_dG, Gs)
 
     def add_score(self, F, Gs) -> None:
         norm_nOT = self.__update_score_by_nOT(F)
         if norm_nOT is None:
-            return
+            return None
         if all(x >= 0 for x in Gs):
             norm_ss_dG = self.__update_score_by_dG_Tm(Gs)
         else:
             norm_ss_dG = self.__update_score_by_dG_Gs(Gs)
         if norm_ss_dG is None:
-            return
+            return None
         self._data["score"] = np.mean([norm_nOT, norm_ss_dG])
 
     def __getitem__(self, key: str) -> Any:
@@ -156,10 +156,10 @@ class DataBase:
             raise AssertionError
         for chromosome in self.chromosome_list:
             chromosome_path = os.path.join(path, f"{chromosome.decode()}.bin")
-            if not os.path.isfile(
-                chromosome_path
-            ):
-                raise AssertionError(f"missing expected chromosome file: '{chromosome_path}'")
+            if not os.path.isfile(chromosome_path):
+                raise AssertionError(
+                    f"missing expected chromosome file: '{chromosome_path}'"
+                )
 
         self._record_byte_size = get_dtype_length(self._dtype)
         if self._record_byte_size <= 0:

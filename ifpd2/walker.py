@@ -599,6 +599,7 @@ class Walker(GenomicWindowSet):
     def __process_window_async(self, *args, **kwargs):
         if self.pool is not None:
             return self.pool.apply_async(Walker.process_window_async, args, kwargs)
+        return None
 
     @staticmethod
     def process_window(

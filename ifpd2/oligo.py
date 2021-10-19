@@ -87,10 +87,10 @@ class Oligo:
         nOT = self.data["nOT"].values
         if nOT <= F[0]:
             self.data["score"] = 0
-            return
+            return None
         if nOT > F[1]:
             self.data["score"] = np.inf
-            return
+            return None
         return self.__norm_value_in_range(nOT, F)
 
     def __update_score_by_dG_Tm(self, Gs):
@@ -98,20 +98,20 @@ class Oligo:
         tm_dG = self.data["tm_dG"].values
         if ss_dG >= tm_dG * min(Gs):
             self.data["score"] = 0
-            return
+            return None
         if ss_dG < tm_dG * max(Gs):
             self.data["score"] = np.inf
-            return
+            return None
         return self.__norm_value_in_range(ss_dG, [tm_dG * f for f in Gs])
 
     def __update_score_by_dG_Gs(self, Gs):
         ss_dG = self.data["ss_dG"].values
         if ss_dG >= Gs[0]:
             self.data["score"] = 0
-            return
+            return None
         if ss_dG < Gs[1]:
             self.data["score"] = np.inf
-            return
+            return None
         return self.__norm_value_in_range(ss_dG, Gs)
 
     def add_score(self, F, Gs):
