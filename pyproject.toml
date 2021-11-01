@@ -37,7 +37,7 @@ tqdm = "^4.58.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
-black = "^21.9b0"
+black = "^21.10b0"
 
 [tool.vulture]
 paths = ["ifpd2"]
