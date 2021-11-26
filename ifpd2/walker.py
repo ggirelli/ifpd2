@@ -107,16 +107,14 @@ class GenomicWindowSet:
         ass.ert_inInterv(self.Wh, 0, 1, "Wh")
 
         ass.ert_multiTypes(self.Rs, [int, float], "Rs")
-        if isinstance(self.Rs, int):
-            if self.Rs <= 1:
-                raise AssertionError
+        if self.Rs > 1:
+            self.Rs = int(self.Rs)
         else:
             ass.ert_inInterv(self.Rs, 0, 1, "Rs")
 
         ass.ert_multiTypes(self.Rt, [int, float], "Rt")
-        if isinstance(self.Rt, int):
-            if self.Rt <= 1:
-                raise AssertionError
+        if self.Rt > 1:
+            self.Rt = int(self.Rt)
         else:
             ass.ert_inInterv(self.Rt, 0, 1, "Rt")
 
