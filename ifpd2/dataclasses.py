@@ -108,9 +108,9 @@ class NonNegativeIntInterval:
     end: int
 
     def __post_init__(self):
-        if self._from < 0:
+        if self.start < 0:
             raise AssertionError
-        if self.end < self.first:
+        if self.end < self.start:
             raise AssertionError
 
     def astuple(self) -> Tuple[int, int]:
