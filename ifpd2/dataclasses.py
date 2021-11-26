@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 
 
 def path_exists(path: str) -> bool:
-    return not isdir(path) and not isfile(path)
+    return isdir(path) or isfile(path)
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class Folder:
             or not self.exists
             and path_exists(self.path)
         ):
-            raise AssertionError
+            raise AssertionError((self.path, self.exists))
 
 
 @dataclass(frozen=True)
