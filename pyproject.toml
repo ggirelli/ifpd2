@@ -9,7 +9,7 @@ homepage = "https://github.com/ggirelli/ifpd2"
 repository = "https://github.com/ggirelli/ifpd2"
 keywords = ["biology", "cell", "DNA", "RNA", "FISH", "fluorescence", "hybridization"]
 classifiers = [
-    "Development Status :: 3 - Beta",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
