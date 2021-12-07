@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 
 ## Unreleased
+
+## [1.0.1a1] - 2021-12-07
 ### Added
 - New entry points: `db make`, `db dump`, `db info`, `db merge`, and `db_reindex`.
 - Module `io` with parsing functions for output generated via oligo-melting, hush, or OligoArrayAux.
@@ -20,4 +22,5 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [1.0.0-alpha] - 2021-02-26
 
+[1.0.1a1] https://github.com/ggirelli/ifpd2/releases/tag/v1.0.1a1  
 [1.0.0-alpha] https://github.com/ggirelli/ifpd2/releases/tag/v1.0.0-alpha  
