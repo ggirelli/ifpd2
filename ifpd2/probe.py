@@ -323,6 +323,8 @@ class OligoProbeBuilder(OligoPathBuilder):
             if (self.k + self.D) * self.N > self.Ps:
                 raise AssertionError
 
+        if isinstance(self.F, tuple):
+            self.F = list(self.F)
         ass.ert_type(self.F, list, "F")
         if len(self.F) != 2:
             raise AssertionError
@@ -333,6 +335,8 @@ class OligoProbeBuilder(OligoPathBuilder):
         if self.F[1] < self.F[0]:
             raise AssertionError
 
+        if isinstance(self.Gs, tuple):
+            self.Gs = list(self.Gs)
         ass.ert_type(self.Gs, list, "Gs")
         if len(self.Gs) != 2:
             raise AssertionError
