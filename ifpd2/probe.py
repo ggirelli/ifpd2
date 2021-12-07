@@ -12,7 +12,7 @@ import shutil
 from ifpd2 import asserts as ass
 
 
-class OligoProbe(object):
+class OligoProbe:
     """Converts a DataFrame of oligo data into an OligoProbe."""
 
     def __init__(self, oligo_data):
@@ -25,9 +25,11 @@ class OligoProbe(object):
 
     @data.setter
     def data(self, oligo_data):
-        assert isinstance(oligo_data, pd.DataFrame)
+        if not isinstance(oligo_data, pd.DataFrame):
+            raise AssertionError
         required_columns = ["start", "end", "Tm"]
-        assert all([col in oligo_data.columns for col in required_columns])
+        if any(col not in oligo_data.columns for col in required_columns):
+            raise AssertionError
         self._data = oligo_data
         self._range = (self._data["start"].min(), self._data["end"].max())
         self._size = self._range[1] - self._range[0]
@@ -108,7 +110,8 @@ class OligoProbe(object):
         return np.intersect1d(self.path, probe.path).shape[0]
 
     def export(self, path):
-        assert not os.path.isfile(path)
+        if os.path.isfile(path):
+            raise AssertionError
         if os.path.isdir(path):
             shutil.rmtree(path)
         os.mkdir(path)
@@ -123,26 +126,24 @@ class OligoProbe(object):
                     "".join(
                         [
                             f">{oligo['name']}:",
-                            f"{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n",
+                            f"{oligo['chromosome']}:{oligo['start']}-{oligo['end']}\n",
                         ]
                     )
                 )
-                BH.write(f"{oligo['seq']}\n")
+                BH.write(f"{oligo['sequence']}\n")
 
 
-class OligoPathBuilder(object):
+class OligoPathBuilder:
     """OligoPathBuilder contains methods to select non-overlapping sets of
-    oligos (i.e., probes) from an oligo DataFrame in input."""
+    oligos (i.e., probes) from an oligo DataFrame in input.
+    """
 
     N = int(48)  # Number of oligos per probe
-    D = int(2)  # Minimum distance between consecutive oligos
+    D: int = int(2)  # Minimum distance between consecutive oligos
     Tr = 10.0  # Melting temperature range half-width
     Ps = int(10000)  # Probe size threshold, in nt (Ps > 1)
     Ph = 0.1  # Maximum hole size in probe as fraction of probe size
     Po = 0.5  # Probe oligo intersection threshold for path reduction
-
-    def __init__(self):
-        super(OligoPathBuilder, self).__init__()
 
     def _assert(self):
         ass.ert_type(self.N, int, "N")
@@ -155,7 +156,8 @@ class OligoPathBuilder(object):
         ass.ert_nonNeg(self.Tr, "Tr")
 
         ass.ert_type(self.Ps, int, "Ps")
-        assert self.Ps > 1
+        if self.Ps <= 1:
+            raise AssertionError
 
         ass.ert_type(self.Ph, float, "Ph")
         ass.ert_inInterv(self.Ph, 0, 1, "Ph")
@@ -171,7 +173,7 @@ class OligoPathBuilder(object):
         idxs = [
             i
             for i in range(A.shape[0] - 1)
-            if i in path_start_set or 0 != len(A[i, i + 1].nonzero()[0])
+            if i in path_start_set or len(A[i, i + 1].nonzero()[0]) != 0
         ]
 
         for i in idxs:
@@ -202,18 +204,16 @@ class OligoPathBuilder(object):
         # distance equal to D
         ass.ert_type(oData, pd.DataFrame, "oData")
 
-        edges = []
         start_positions = oData["start"].values
         end_positions = oData["end"].values
 
-        for i in range(oData.shape[0]):
-            edges.append(
-                np.logical_or(
-                    end_positions + D < oData["start"].values[i],
-                    start_positions - D >= oData["end"].values[i],
-                )
+        edges = [
+            np.logical_or(
+                end_positions + D < oData["start"].values[i],
+                start_positions - D >= oData["end"].values[i],
             )
-
+            for i in range(oData.shape[0])
+        ]
         return OligoPathBuilder.get_paths(np.vstack(edges).astype("i"))
 
     def __size_paths(self, path_set, exit_polls):
@@ -247,7 +247,7 @@ class OligoPathBuilder(object):
                 continue
             selected_paths.add(path)
 
-        comment = "".join([f"{r}{c}" for (c, r) in exit_polls.items()])
+        comment = "".join(f"{r}{c}" for (c, r) in exit_polls.items())
         return (list(selected_paths), comment)
 
     def __path_passes(self, path, oData):
@@ -272,7 +272,7 @@ class OligoPathBuilder(object):
         # Converts a list of paths into a list of probes
         ass.ert_type(path_list, list, "path list")
         probe_list = []
-        if 0 != len(path_list):
+        if len(path_list) != 0:
             for path in path_list:
                 probe_list.append(OligoProbeBuilder.path2probe(path, oData))
         return probe_list
@@ -286,15 +286,14 @@ class OligoPathBuilder(object):
 class OligoProbeBuilder(OligoPathBuilder):
     """Class to build OligoProbe objects."""
 
-    k = None
-    F = (0, 100)  # Threshold on number of off-targets (range)
-    Gs = (0.0, 0.5)  # dG of SS either as kcal/mol (negative)
-    #  or as fraction dG of hybrid (0<=Gs<=1)
-    #  (range)
-    Ot = 0.1  # Step for oligo score relaxation
-
     def __init__(self):
         super(OligoProbeBuilder, self).__init__()
+        self.k = None
+        self.F = [0, 99]  # Threshold on number of off-targets (range)
+        self.Gs = [0.0, 0.5]  # dG of SS either as kcal/mol (negative)
+        #  or as fraction dG of hybrid (0<=Gs<=1)
+        #  (range)
+        self.Ot = 0.1  # Step for oligo score relaxation
 
     @property
     def config(self):
@@ -321,38 +320,50 @@ class OligoProbeBuilder(OligoPathBuilder):
         if not isinstance(self.k, type(None)):
             ass.ert_type(self.k, int, "k")
             ass.ert_nonNeg(self.k, "k")
-            assert (self.k + self.D) * self.N <= self.Ps
+            if (self.k + self.D) * self.N > self.Ps:
+                raise AssertionError
 
-        ass.ert_type(self.F, tuple, "F")
-        assert 2 == len(self.F)
+        if isinstance(self.F, tuple):
+            self.F = list(self.F)
+        ass.ert_type(self.F, list, "F")
+        if len(self.F) != 2:
+            raise AssertionError
         for i in range(2):
             ass.ert_type(self.F[i], int, f"F[{i}]")
-            assert self.F[i] >= 0
-        assert self.F[1] >= self.F[0]
+            if self.F[i] < 0:
+                raise AssertionError
+        if self.F[1] < self.F[0]:
+            raise AssertionError
 
-        ass.ert_type(self.Gs, tuple, "Gs")
-        assert 2 == len(self.Gs)
+        if isinstance(self.Gs, tuple):
+            self.Gs = list(self.Gs)
+        ass.ert_type(self.Gs, list, "Gs")
+        if len(self.Gs) != 2:
+            raise AssertionError
         for i in range(2):
             ass.ert_type(self.Gs[i], float, f"Gs[{i}]")
-            assert self.Gs[i] <= 1
-        assert all(np.array(self.Gs) < 0) or all(np.array(self.Gs) >= 0)
+            if self.Gs[i] > 1:
+                raise AssertionError
+        if not all(np.array(self.Gs) < 0) and not all(np.array(self.Gs) >= 0):
+            raise AssertionError
         if self.Gs[0] >= 0:
-            assert self.Gs[1] >= self.Gs[0]
-        else:
-            assert self.Gs[1] <= self.Gs[0]
+            if self.Gs[1] < self.Gs[0]:
+                raise AssertionError
+        elif self.Gs[1] > self.Gs[0]:
+            raise AssertionError
 
         ass.ert_type(self.Ot, float, "Ot")
-        assert 0 < self.Ot and 1 >= self.Ot
+        if self.Ot <= 0 or self.Ot > 1:
+            raise AssertionError
 
     def get_prologue(self):
         s = "* OligoProbeBuilder *\n\n"
         s += f"Aim to build probes with {self.N} oligos each.\n"
         s += f"Off-target threshold range set at {self.F}.\n"
+        s += "Threshold on the delta free energy of the most stable"
         if isinstance(self.Gs[0], int):
-            s += "Threshold on the delta free energy of the most stable"
             s += f" secondary structure set at range {self.Gs} kcal/mol.\n"
         else:
-            s += "Threshold on the delta free energy of the most stable"
             s += " secondary structure\nset at range"
             s += f" {[t*100 for t in self.Gs]}% of the delta free energy of"
             s += " hybridization.\n"
@@ -384,7 +395,7 @@ class OligoProbeBuilder(OligoPathBuilder):
         oGroup = self.__focus_oligos(window, oGroup)
         probe_list = self.__explore_filter(oGroup, logger)
         if not np.isnan(window["cfr_start"]):
-            while 0 == len(probe_list):
+            while len(probe_list) == 0:
                 oGroup.reset_threshold()
                 if oGroup.focus_window_size >= self.Ps:
                     oGroup.discard_focused_oligos_safeN(self.N - 1, self.D)
@@ -400,14 +411,14 @@ class OligoProbeBuilder(OligoPathBuilder):
         probe_list = self.__get_non_overlapping_probes(
             oGroup.get_focused_oligos(True), logger
         )
-        while 0 == len(probe_list):
+        while len(probe_list) == 0:
             score_thr += self.Ot
             if score_thr > max_score:
                 break
 
             oGroup.apply_threshold(score_thr)
             nOligosUsable = oGroup.get_n_focused_oligos(True)
-            if nOligosUsable == noligos or 0 == nOligosUsable:
+            if nOligosUsable in [noligos, 0]:
                 continue
 
             logger.info(
@@ -458,10 +469,10 @@ class OligoProbeBuilder(OligoPathBuilder):
             )
         )
 
-        if 0 == max_score and 0 == nOligos_prev_score_thr:
+        if max_score == 0 and nOligos_prev_score_thr == 0:
             return []
 
-        while 0 == nOligos_prev_score_thr and score_thr <= max_score - self.Ot:
+        while nOligos_prev_score_thr == 0 and score_thr <= max_score - self.Ot:
             score_thr += self.Ot
             oGroup.apply_threshold(score_thr)
             nOligos_prev_score_thr = oGroup.get_n_focused_oligos(True)
@@ -484,7 +495,7 @@ class OligoProbeBuilder(OligoPathBuilder):
         # to OligoProbe objects.
 
         paths = self.get_non_overlapping_paths(oData, self.D)
-        if 0 == len(paths):
+        if len(paths) == 0:
             logger.warning("No oligo paths found.")
             return []
 
@@ -538,7 +549,7 @@ class OligoProbeBuilder(OligoPathBuilder):
 
     def reduce_probe_list(self, probe_list):
         try:
-            if 0 == len(probe_list):
+            if len(probe_list) == 0:
                 return []
             sorted_probes = sorted(probe_list, key=lambda p: p.range[0])
 
@@ -553,25 +564,21 @@ class OligoProbeBuilder(OligoPathBuilder):
             print(e)
             raise
 
-    def select_probe_from_pair(self, probeA, probeB):
+    @staticmethod
+    def select_probe_from_pair(probeA, probeB):
         if probeA.size < probeB.size:
             return probeA
-        else:
-            return probeB
         if np.diff(probeA.tm_range)[0] < np.diff(probeB.tm_range)[0]:
             return probeA
-        else:
-            return probeB
         if probeA.spread / probeA.d_mean < probeB.spread / probeB.d_mean:
             return probeA
-        else:
-            return probeB
-        return probeA
+        return probeB
 
     @staticmethod
     def import_probes(ipath):
         # Imports output from given directory path
-        assert os.path.isdir(ipath)
+        if not os.path.isdir(ipath):
+            raise AssertionError
 
         pPath = os.path.join(ipath, "probe_paths.tsv")
         if not os.path.isfile(pPath):
@@ -584,16 +591,16 @@ class OligoProbeBuilder(OligoPathBuilder):
         oligos = pd.read_csv(oPath, "\t", index_col=0)
         paths = pd.read_csv(pPath, "\t", index_col=0)
 
-        probe_list = []
-        for p in paths.iloc[:, 0]:
-            probe_list.append(OligoProbe(oligos.loc[[int(o) for o in p.split(",")]]))
-
-        return probe_list
+        return [
+            OligoProbe(oligos.loc[[int(o) for o in p.split(",")]])
+            for p in paths.iloc[:, 0]
+        ]
 
     @staticmethod
     def export_probes(probe_list, opath):
         # Exports a list of probes to a directory
-        assert os.path.isdir(opath)
+        if not os.path.isdir(opath):
+            raise AssertionError
 
         probe_df = pd.concat([p.featDF for p in probe_list], ignore_index=True)
         probe_df.sort_values("start", inplace=True)
@@ -603,11 +610,11 @@ class OligoProbeBuilder(OligoPathBuilder):
             os.path.join(opath, "oligos.tsv"), "\t"
         )
 
-        probe_paths = []
-        for pi in range(len(probe_list)):
-            probe_paths.append(
-                [",".join([str(x) for x in probe_list[pi].data.index.tolist()])]
-            )
+        probe_paths = [
+            [",".join(str(x) for x in probe_list[pi].data.index.tolist())]
+            for pi in range(len(probe_list))
+        ]
+
         probe_paths = pd.DataFrame(probe_paths)
         probe_paths.columns = ["cs_oligos"]
         probe_paths.to_csv(os.path.join(opath, "probe_paths.tsv"), "\t")

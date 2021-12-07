@@ -15,7 +15,7 @@ from typing import List
 from ifpd2.probe import OligoProbe
 
 
-class OligoProbeSet(object):
+class OligoProbeSet:
     """Set of non-overlapping probes built from windows."""
 
     def __init__(self, probe_list):
@@ -28,7 +28,8 @@ class OligoProbeSet(object):
 
     @probe_list.setter
     def probe_list(self, probe_list):
-        assert all([isinstance(p, OligoProbe) for p in probe_list])
+        if not all(isinstance(p, OligoProbe) for p in probe_list):
+            raise AssertionError
         self._probe_list = sorted(probe_list, key=lambda p: p.range[0])
         self._probe_tm_ranges = [p.tm_range for p in self.probe_list]
         self._tm_range = (
@@ -41,10 +42,7 @@ class OligoProbeSet(object):
         probe_starts = np.array([r[0] for r in self.probe_ranges])
         probe_ends = np.array([r[1] for r in self.probe_ranges])
         self._range = (probe_starts.min(), probe_ends.max())
-        if 1 == len(probe_list):
-            self._ds = 0
-        else:
-            self._ds = probe_starts[1:] - probe_ends[:-1]
+        self._ds = 0 if len(probe_list) == 1 else probe_starts[1:] - probe_ends[:-1]
         self._d_mean = np.mean(self.ds)
         self._d_range = (np.min(self.ds), np.max(self.ds))
         tm = [p.data["Tm"].tolist() for p in self.probe_list]
@@ -144,7 +142,8 @@ class OligoProbeSet(object):
         return df
 
     def export(self, path):
-        assert not os.path.isfile(path)
+        if os.path.isfile(path):
+            raise AssertionError
         if os.path.isdir(path):
             shutil.rmtree(path)
         os.mkdir(path)
@@ -165,31 +164,34 @@ class OligoProbeSet(object):
                         "".join(
                             [
                                 f">probe_{pi}:{oligo['name']}",
-                                f":{oligo['chrom']}:{oligo['start']}-{oligo['end']}\n",
+                                f":{oligo['chromosome']}:",
+                                f"{oligo['start']}-{oligo['end']}\n",
                             ]
                         )
                     )
-                    BH.write(f"{probe.data.iloc[i]['seq']}\n")
+                    BH.write(f"{probe.data.iloc[i]['sequence']}\n")
 
 
-class OligoProbeSetBuilder(object):
+class OligoProbeSetBuilder:
     """Class to build OligoProbeSet objects."""
 
     probe_set_list: List = []
 
     def __init__(self, out_path):
         super(OligoProbeSetBuilder, self).__init__()
-        assert not os.path.isfile(out_path)
+        if os.path.isfile(out_path):
+            raise AssertionError
         self.out_path = out_path
         if os.path.isdir(out_path):
             shutil.rmtree(out_path)
         os.mkdir(out_path)
 
-    def __build_probe_set_list(self, window_list, i):
+    @staticmethod
+    def __build_probe_set_list(window_list, i):
         probe_set_list = [(p,) for p in window_list[i]]
 
         for w in window_list[(i + 1) :]:
-            if 0 == len(w):
+            if len(w) == 0:
                 continue
 
             current_probe_set_list = list(tuple(probe_set_list))
@@ -206,9 +208,15 @@ class OligoProbeSetBuilder(object):
     def build(self, probe_candidates):
         for (wSet, window_list) in probe_candidates.items():
             window_list = list(window_list.values())
-            i = 0
-            while 0 == len(window_list[i]):
-                i += 1
+
+            non_empty_ids = [
+                i for i in range(len(window_list)) if len(window_list[i]) != 0
+            ]
+
+            if not non_empty_ids:
+                logging.warning(f"No probe candidates found, dropped. [ws{wSet+1}]")
+                continue
+            i = non_empty_ids[0]
 
             probe_set_list = self.__build_probe_set_list(window_list, i)
 
@@ -227,7 +235,7 @@ class OligoProbeSetBuilder(object):
             f"Built {len(self.probe_set_list)} " + "probe set candidates in total."
         )
 
-        if 0 < len(self.probe_set_list):
+        if self.probe_set_list:
             pd.concat([ps.featDF for ps in self.probe_set_list]).reset_index(
                 drop=True
             ).to_csv(os.path.join(self.out_path, "probe_sets.tsv"), "\t")

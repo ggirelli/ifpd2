@@ -13,16 +13,17 @@ import pandas as pd  # type: ignore
 from pathlib import Path
 import shutil
 from tqdm import tqdm  # type: ignore
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
 
 from ifpd2 import asserts as ass
 from ifpd2.logging import add_log_file_handler
-from ifpd2.database import Database
-from ifpd2.oligo import Oligo, OligoGroup
+from ifpd2.database import DataBase
+from ifpd2.oligo import OligoGroup
 from ifpd2.probe import OligoProbeBuilder
+from ifpd2.walker2 import ChromosomeWalker
 
 
-class GenomicWindowSet(object):
+class GenomicWindowSet:
     """Genomic window manager."""
 
     _window_sets = None
@@ -32,19 +33,16 @@ class GenomicWindowSet(object):
     E = int(3500000)  # Region end coordinate (excluded)
 
     X = 20  # Number of probes to design
-    Ws = None  # Window size (used when X is not provided)
-    Wh = 0.1  # Window shift (as a percentage of the window size)
+    Ws: Optional[int] = None  # Window size (used when X is not provided)
+    Wh: Optional[float] = 0.1  # Window shift (as a percentage of the window size)
 
-    Rs = int(8000)  # Region focus size, either in nt (Rs > 1)
+    Rs: Union[int, float] = int(8000)  # Region focus size, either in nt (Rs > 1)
     #  or fraction of Ws (0<Rs<=1)
     #  When provided in nt, it is applied only if Rs<Ws
-    Rt = int(1000)  # Region focus step, either in nt (Rt > 1)
+    Rt: Union[int, float] = int(1000)  # Region focus step, either in nt (Rt > 1)
     #  or fraction of Rs (0<Rt<=1),
     #  for focus region expansion
     _growing = False
-
-    def __init__(self):
-        super(GenomicWindowSet, self).__init__()
 
     @property
     def window_sets(self):
@@ -87,7 +85,8 @@ class GenomicWindowSet(object):
         ass.ert_nonNeg(self.S, "S", True)
         ass.ert_type(self.E, int, "E")
         ass.ert_nonNeg(self.E, "E", True)
-        assert self.S <= self.E
+        if self.S > self.E:
+            raise AssertionError
 
         ass.ert_multiTypes(self.X, [int, type(None)], "X")
         ass.ert_multiTypes(self.Ws, [int, type(None)], "Ws")
@@ -108,14 +107,14 @@ class GenomicWindowSet(object):
         ass.ert_inInterv(self.Wh, 0, 1, "Wh")
 
         ass.ert_multiTypes(self.Rs, [int, float], "Rs")
-        if isinstance(self.Rs, int):
-            assert self.Rs > 1
+        if self.Rs > 1:
+            self.Rs = int(self.Rs)
         else:
             ass.ert_inInterv(self.Rs, 0, 1, "Rs")
 
         ass.ert_multiTypes(self.Rt, [int, float], "Rt")
-        if isinstance(self.Rt, int):
-            assert self.Rt > 1
+        if self.Rt > 1:
+            self.Rt = int(self.Rt)
         else:
             ass.ert_inInterv(self.Rt, 0, 1, "Rt")
 
@@ -124,18 +123,20 @@ class GenomicWindowSet(object):
         if not os.path.isdir(os.path.join(self.out_path, "window_sets")):
             os.mkdir(os.path.join(self.out_path, "window_sets"))
 
-        if self.S == self.E:
-            assert not isinstance(self.Ws, type(None)), " ".join(
-                [
-                    "During full-chromosome search, provide a window size.",
-                    "I.e., it is not possible to design X probes.",
-                ]
+        if self.S == self.E and isinstance(self.Ws, type(None)):
+            raise AssertionError(
+                " ".join(
+                    [
+                        "During full-chromosome search, provide a window size.",
+                        "I.e., it is not possible to design X probes.",
+                    ]
+                )
             )
 
         if isinstance(self.X, int):
             self.Ws = (
                 self.E - self.S
-                if 1 == self.X
+                if self.X == 1
                 else np.floor((self.E - self.S) / (self.X + 1)).astype("i")
             )
 
@@ -157,7 +158,7 @@ class GenomicWindowSet(object):
     def __mk_all_window_sets(self):
         # Prepare all window sets in a region of interest
         window_starts = np.floor(np.arange(self.S, self.E, self.Ws)).astype("i")
-        if 0 != (self.E - self.S) % self.Ws or 1 != len(window_starts):
+        if (self.E - self.S) % self.Ws != 0 or len(window_starts) != 1:
             window_starts = window_starts[:-1]
 
         window_mids = (window_starts + self.Ws / 2).reshape((window_starts.shape[0], 1))
@@ -175,11 +176,9 @@ class GenomicWindowSet(object):
                     np.floor(window_mids + self.Rs / 2),
                 ]
             )
-            self.__focus_on_center = True
         else:
             nans = np.array([np.nan for x in range(window_mids.shape[0])])
             central_regions = np.vstack([nans, nans]).transpose()
-            self.__focus_on_center = False
 
         window_sets = []
         for i in range(len(np.arange(0, 1, self.Wh))):
@@ -204,10 +203,8 @@ class GenomicWindowSet(object):
         mid = self.S + self.Ws / 2
         if self.Rs < self.Ws:
             cstart, cend = (np.floor(mid - self.Rs / 2), np.floor(mid + self.Rs / 2))
-            self.__focus_on_center = True
         else:
             cstart, cend = (np.nan, np.nan)
-            self.__focus_on_center = False
         return [[self.S, mid, self.S + self.Ws, cstart, cend, 0, 0]]
 
     def _add_window(self):
@@ -222,7 +219,7 @@ class GenomicWindowSet(object):
 
         new_window_id = 0
         new_set_id = self.window_sets["s"].max() + 1
-        if 0 != len(non_overlapping_group_ids):
+        if len(non_overlapping_group_ids) != 0:
             new_set_id = gData[non_overlapping_group_ids].min()
             new_window_id = (
                 self.window_sets[self.window_sets["s"] == new_set_id]["w"].max() + 1
@@ -251,18 +248,20 @@ class GenomicWindowSet(object):
 class Walker(GenomicWindowSet):
     """Walker walks through the oligos stored in an ifpd2 database,
     assigns them to windows based on user-defined parameters, and then builds
-    probe candidates."""
+    probe candidates.
+    """
 
     out_path = "."
     reuse = False
     _threads = 1
+    __db: DataBase
 
     __current_oligos: List = []
     __walk_results: Dict = {}
 
     def __init__(self, db_path, logger=logging.getLogger()):
         GenomicWindowSet.__init__(self)
-        self.__db = Database(db_path)
+        self.__db = DataBase(db_path)
         self.logger = logger
 
     @property
@@ -272,8 +271,7 @@ class Walker(GenomicWindowSet):
     @threads.setter
     def threads(self, threads):
         ass.ert_type(threads, int, threads)
-        threads = max(1, threads)
-        threads = min(mp.cpu_count(), threads)
+        threads = max(1, min(threads, mp.cpu_count()))
         self._threads = threads
 
     @property
@@ -281,7 +279,7 @@ class Walker(GenomicWindowSet):
         return self.__current_oligos
 
     def remove_oligos_starting_before(self, pos):
-        self.__current_oligos = [o for o in self.current_oligos if o.start >= pos]
+        self.__current_oligos = [o for o in self.current_oligos if o["start"] >= pos]
 
     @property
     def window_set_path(self):
@@ -331,13 +329,16 @@ class Walker(GenomicWindowSet):
 
     def _assert(self):
         GenomicWindowSet._assert(self)
-        assert os.path.isdir(self.out_path)
+        if not os.path.isdir(self.out_path):
+            raise AssertionError
 
-    def start(self, *args, **kwargs):
+    def start(self, *args, start_from_nt: int = 0, end_at_nt: int = -1, **kwargs):
         self._assert()
         self._init_windows()
         self.print_prologue()
-        self.__start_walk(*args, **kwargs)
+        self.__start_walk(
+            *args, start_from_nt=start_from_nt, end_at_nt=end_at_nt, **kwargs
+        )
 
     def print_prologue(self):
 
@@ -365,71 +366,67 @@ class Walker(GenomicWindowSet):
             return np.inf
         return self.E
 
-    def __finished_parsing(self, line, oligo_start, oligo_end, DBHpb, args, kwargs):
+    def __finished_parsing(self, record, DBHpb, args, kwargs):
         # Return:
         #   None to stop parsing
         #   True to parse in current window
         #   Parsed output to append it
 
-        if oligo_start >= self.current_window["end"]:
-            # DBHpb.clear()
+        if record["start"] < self.current_window["end"]:
+            return (None, "continue")
+        # DBHpb.clear()
 
-            parsed_output = self.__process_window_async(
-                self.current_oligos,
-                self.current_window,
-                self.fprocess,
-                self.fpost,
-                *args,
-                opath=self.window_path,
-                loggerName=self.logger.name,
-                **kwargs,
-            )
+        parsed_output = self.__process_window_async(
+            self.current_oligos,
+            self.current_window,
+            self.fprocess,
+            self.fpost,
+            *args,
+            opath=self.window_path,
+            loggerName=self.logger.name,
+            **kwargs,
+        )
 
-            if self.reached_last_window:
-                self.logger.info("Reached last window")
-                return (None, "break")
+        if self.reached_last_window:
+            self.logger.info("Reached last window")
+            return (None, "break")
 
-            self.go_to_next_window()
-            self._preprocess_window()
-            self._load_windows_until_next_to_do()
-            if self.reached_last_window and self._window_done():
-                self.logger.info("Reached last window and done")
-                return (None, "break")
+        self.go_to_next_window()
+        self._preprocess_window()
+        self._load_windows_until_next_to_do()
+        if self.reached_last_window and self._window_done():
+            self.logger.info("Reached last window and done")
+            return (None, "break")
 
-            if 0 != len(self.current_oligos):
-                self.remove_oligos_starting_before(self.current_window["start"])
+        if len(self.current_oligos) != 0:
+            self.remove_oligos_starting_before(self.current_window["start"])
 
-            return (parsed_output, "append")
-        return (None, "continue")
+        return (parsed_output, "append")
 
-    def __parse_line(self, line, oligo_start, oligo_end, DBHpb, args, kwargs):
-        if oligo_start >= self.current_window["start"]:
+    def __parse_line(self, record, DBHpb, args, kwargs):
+        if record["start"] >= self.current_window["start"]:
             parsing_output, parsing_status = self.__finished_parsing(
-                line, oligo_start, oligo_end, DBHpb, args, kwargs
+                record, DBHpb, args, kwargs
             )
-            if parsing_status == "continue":
-                if oligo_end > self.walk_destination:  # End reached
-                    self.logger.info("Reached destination")
-                    return (None, "break")
-
-                oligo = Oligo(line, self.r)
-                self.fparse(oligo, *args, **kwargs)
-
-                if not np.isnan(oligo.score):
-                    self.current_oligos.append(oligo)
-
-                self.rw += 1
-            else:
+            if parsing_status != "continue":
                 return (parsing_output, parsing_status)
+            if record["end"] > self.walk_destination:  # End reached
+                self.logger.info("Reached destination")
+                return (None, "break")
+
+            self.fparse(record, *args, **kwargs)
+
+            if not np.isnan(record["score"]):
+                self.current_oligos.append(record)
+
+            self.rw += 1
         return (None, "continue")
 
     def __parse_database(self, DBHpb, args, kwargs):
         exec_results = []
-        for line in DBHpb:
-            oligo_start, oligo_end = [int(x) for x in line.strip().split("\t")[2:4]]
-
+        for record in DBHpb:
             parsing_output, parsing_status = self.__parse_line(
-                line, oligo_start, oligo_end, DBHpb, args, kwargs
+                record, DBHpb, args, kwargs
             )
 
             if parsing_status == "break":
@@ -438,7 +435,7 @@ class Walker(GenomicWindowSet):
                 exec_results.append(parsing_output)
             self.r += 1
 
-        if 0 != len(self.current_oligos):
+        if len(self.current_oligos) != 0:
             exec_results.append(
                 self.__process_window_async(
                     self.current_oligos,
@@ -456,13 +453,15 @@ class Walker(GenomicWindowSet):
     def __end_walk(self, exec_results):
         for promise in exec_results:
             s, w, results = promise.get()
-            if s in self.walk_results.keys():
+            if s in self.__walk_results.keys():
                 self.__walk_results[s][w] = results
             else:
                 self.__walk_results[s] = {w: results}
 
-    def __start_walk(self, *args, **kwargs):
-        self.pool = mp.Pool(np.min([self.threads, mp.cpu_count()]))
+    def __start_walk(
+        self, *args, start_from_nt: int = 0, end_at_nt: int = -1, **kwargs
+    ):
+        self.pool = mp.Pool(max(1, min(self.threads, mp.cpu_count())))
         self.logger.info(f"Prepared a pool of {self.threads} threads.")
 
         self._preprocess_window()
@@ -475,21 +474,26 @@ class Walker(GenomicWindowSet):
         self.r = 0  # Record ID
         self.rw = 0  # Walk step counter
 
-        DBHpb = tqdm(self.__db.buffer(self.C), desc="Parsing records", leave=None)
+        DBHpb = tqdm(
+            ChromosomeWalker(self.__db, self.C.encode()).buffer(
+                start_from_nt, end_at_nt
+            ),
+            total=self.__db.chromosome_recordnos[self.C.encode()],
+            desc="Parsing records",
+            leave=False,
+        )
         parsing_output = self.__parse_database(DBHpb, args, kwargs)
         self.logger.info(f"Parsed {self.rw}/{self.r} records.")
 
         self.__end_walk(parsing_output)
         DBHpb.close()
         self.pool.close()
-        self.pool.join()
 
     def _window_done(self):
         s = int(self.current_window["s"])
         w = int(self.current_window["w"])
-        if s in self.walk_results.keys():
-            if w in self.walk_results[s].keys():
-                return isinstance(self.walk_results[s][w], list)
+        if s in self.walk_results.keys() and w in self.walk_results[s].keys():
+            return isinstance(self.walk_results[s][w], list)
         return False
 
     def _load_windows_until_next_to_do(self):
@@ -520,12 +524,8 @@ class Walker(GenomicWindowSet):
                 wid = int(self.current_window["w"])
                 self.__walk_results[sid][wid] = self.fimport(self.window_path)
                 return
-            else:
-                shutil.rmtree(self.window_path)
-                os.mkdir(self.window_path)
-        else:
-            shutil.rmtree(self.window_path)
-            os.mkdir(self.window_path)
+        shutil.rmtree(self.window_path)
+        os.mkdir(self.window_path)
 
     def _preprocess_window(self):
         # Preprocess current window
@@ -591,6 +591,7 @@ class Walker(GenomicWindowSet):
     def __process_window_async(self, *args, **kwargs):
         if self.pool is not None:
             return self.pool.apply_async(Walker.process_window_async, args, kwargs)
+        return None
 
     @staticmethod
     def process_window(
@@ -605,7 +606,7 @@ class Walker(GenomicWindowSet):
         **kwargs,
     ):
         # Process oligos from window using fprocess. Then, post-process them
-        # with fopost. Requires at least N oligos to proceeed. If opath is
+        # with fopost. Requires at least N oligos to proceed. If opath is
         # specified, a ".done" file is touched upon successful postprocessing.
         logger = logging.getLogger(loggerName)
         kwargs["loggerName"] = loggerName
@@ -641,13 +642,17 @@ class Walker(GenomicWindowSet):
         return (int(window["s"]), int(window["w"]), results)
 
     @staticmethod
-    def fparse(oligo, opb=None, *args, **kwargs):
-        oligo.add_score(opb.F, opb.Gs)
+    def fparse(record, opb=None, *args, **kwargs):
+        record.add_score(opb.F, opb.Gs)
+        # if record["off_target_no"]<100:
+        #     print((record._data, opb.F, opb.Gs))
+        #     print(record.to_dataframe())
 
     @staticmethod
     def fprocess(oGroup, window, *args, **kwargs):
         opb = copy.copy(kwargs["opb"])
-        assert isinstance(opb, OligoProbeBuilder)
+        if not isinstance(opb, OligoProbeBuilder):
+            raise AssertionError
         logger = logging.getLogger(kwargs["loggerName"])
         probe_list = opb.start(oGroup, window, kwargs["cfr_step"], logger)
         reduced_probe_list = opb.reduce_probe_list(probe_list)
@@ -662,9 +667,10 @@ class Walker(GenomicWindowSet):
 
     @staticmethod
     def fpost(results, opath, *args, **kwargs):
-        assert isinstance(kwargs["opb"], OligoProbeBuilder)
+        if not isinstance(kwargs["opb"], OligoProbeBuilder):
+            raise AssertionError
         logger = logging.getLogger(kwargs["loggerName"])
-        if 0 == len(results):
+        if len(results) == 0:
             logger.critical(f"Built {len(results)} oligo probe candidates")
             logger.handlers = logger.handlers[:-1]
         else:

@@ -37,7 +37,7 @@ jobs:
       fail-fast: true
       matrix:
         os: ["ubuntu-latest"]
-        python-version: [3.7, 3.8]
+        python-version: [3.8, 3.9]
     runs-on: ${{ matrix.os }}
     steps:
     # Checkout repo and setup python
@@ -62,8 +62,8 @@ jobs:
     - name: Install dependencies
       run: poetry install
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-    # run test suite
-    # - name: Test
-    #   run: |
-    #     source .venv/bin/activate
-    #     pytest radiantkit/tests/
+    # run: test suite
+    - name: Test
+      run: |
+        source .venv/bin/activate
+        pytest ifpd2/tests/

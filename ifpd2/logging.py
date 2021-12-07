@@ -11,9 +11,11 @@ from typing import Optional
 
 
 def add_log_file_handler(path: str, logger_name: Optional[str] = None) -> None:
-    assert not os.path.isdir(path)
+    if os.path.isdir(path):
+        raise AssertionError
     log_dir = os.path.dirname(path)
-    assert os.path.isdir(log_dir) or "" == log_dir
+    if not (os.path.isdir(log_dir) or log_dir == ""):
+        raise AssertionError
     fh = RichHandler(console=Console(file=open(path, mode="w+")), markup=True)
     fh.setLevel(logging.INFO)
     logging.getLogger(logger_name).addHandler(fh)

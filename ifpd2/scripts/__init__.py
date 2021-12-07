@@ -3,9 +3,9 @@
 @contact: gigi.ga90@gmail.com
 """
 
-from ifpd2.scripts import arguments, ifpd2
-from ifpd2.scripts import dbchk
-from ifpd2.scripts import query
+from ifpd2.scripts import autocomplete, ifpd2
+from ifpd2.scripts import db, extract_kmers
+from ifpd2.scripts import query, query2
 
 import logging
 from rich.logging import RichHandler  # type: ignore
@@ -16,4 +16,11 @@ logging.basicConfig(
     handlers=[RichHandler(markup=True, rich_tracebacks=True)],
 )
 
-__all__ = ["arguments", "ifpd2", "dbchk", "query"]
+__all__ = [
+    "autocomplete",
+    "ifpd2",
+    "db",
+    "extract_kmers",
+    "query",
+    "query2",
+]

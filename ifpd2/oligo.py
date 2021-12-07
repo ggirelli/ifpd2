@@ -3,16 +3,19 @@
 @contact: gigi.ga90@gmail.com
 """
 
+from ifpd2 import asserts as ass
+from ifpd2.dataclasses import GCRange
 import logging
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
+from tqdm import tqdm  # type: ignore
+from typing import List, Tuple
 
-from ifpd2 import asserts as ass
 
-
-class Oligo(object):
+class Oligo:
     """Oligo database line/record parser.
-    Presents oligo values as properties."""
+    Presents oligo values as properties.
+    """
 
     _data = None
 
@@ -35,7 +38,8 @@ class Oligo(object):
     def __init__(self, oligo, i):
         super(Oligo, self).__init__()
         ass.ert_type(i, int, "oligo id")
-        assert i >= 0
+        if i < 0:
+            raise AssertionError
         self._raw_data = oligo.strip().split("\t")
         for i in [2, 3, 9, 10]:
             self._raw_data[i] = int(self._raw_data[i])
@@ -75,7 +79,7 @@ class Oligo(object):
 
     @staticmethod
     def __norm_value_in_range(v, r):
-        if 0 == r[1]:
+        if r[1] == 0:
             return np.nan
         return (v - r[0]) / (r[1] - r[0])
 
@@ -83,10 +87,10 @@ class Oligo(object):
         nOT = self.data["nOT"].values
         if nOT <= F[0]:
             self.data["score"] = 0
-            return
+            return None
         if nOT > F[1]:
             self.data["score"] = np.inf
-            return
+            return None
         return self.__norm_value_in_range(nOT, F)
 
     def __update_score_by_dG_Tm(self, Gs):
@@ -94,27 +98,27 @@ class Oligo(object):
         tm_dG = self.data["tm_dG"].values
         if ss_dG >= tm_dG * min(Gs):
             self.data["score"] = 0
-            return
+            return None
         if ss_dG < tm_dG * max(Gs):
             self.data["score"] = np.inf
-            return
+            return None
         return self.__norm_value_in_range(ss_dG, [tm_dG * f for f in Gs])
 
     def __update_score_by_dG_Gs(self, Gs):
         ss_dG = self.data["ss_dG"].values
         if ss_dG >= Gs[0]:
             self.data["score"] = 0
-            return
+            return None
         if ss_dG < Gs[1]:
             self.data["score"] = np.inf
-            return
+            return None
         return self.__norm_value_in_range(ss_dG, Gs)
 
     def add_score(self, F, Gs):
         norm_nOT = self.__update_score_by_nOT(F)
         if norm_nOT is None:
             return
-        if all([x >= 0 for x in Gs]):
+        if all(x >= 0 for x in Gs):
             norm_ss_dG = self.__update_score_by_dG_Tm(Gs)
         else:
             norm_ss_dG = self.__update_score_by_dG_Gs(Gs)
@@ -123,10 +127,11 @@ class Oligo(object):
         self.data["score"] = np.mean([norm_nOT, norm_ss_dG])
 
 
-class OligoGroup(object):
+class OligoGroup:
     """Allows to select oligos from a group based on a "focus" window of
     interest. The window can be expanded to the closest oligo or to retain at
-    least a given number of oligos."""
+    least a given number of oligos.
+    """
 
     _focus_window = None  # Left-close, right-open
     _oligos_in_focus_window = None
@@ -135,9 +140,12 @@ class OligoGroup(object):
     def __init__(self, oligos, logger=logging.getLogger()):
         super(OligoGroup, self).__init__()
         self.logger = logger
-        self._data = pd.concat([o.data for o in oligos], ignore_index=True)
+        self._data = pd.concat(
+            [o.to_dataframe() for o in oligos if np.isfinite(o["score"])],
+            ignore_index=True,
+        )
         self._data = self._data.loc[self._data["score"] <= 1, :]
-        self._oligos_passing_score_filter = self._data["score"].values <= 1
+        self._oligos_passing_score_filter = self._data.shape[0]
 
     @property
     def data(self):
@@ -150,8 +158,10 @@ class OligoGroup(object):
     @focus_window.setter
     def focus_window(self, focus_window):
         ass.ert_type(focus_window, tuple, "focus window")
-        assert 2 == len(focus_window)
-        assert focus_window[1] > focus_window[0]
+        if len(focus_window) != 2:
+            raise AssertionError
+        if focus_window[1] <= focus_window[0]:
+            raise AssertionError
         self._focus_window = focus_window
 
     @property
@@ -181,11 +191,10 @@ class OligoGroup(object):
     def get_focused_oligos(self, onlyUsable=False):
         if onlyUsable:
             return self._data.loc[self.usable_oligos]
-        else:
-            return self._data.loc[self.oligos_in_focus_window, :]
+        return self._data.loc[self.oligos_in_focus_window, :]
 
     def get_n_focused_oligos(self, onlyUsable=False):
-        if 0 == self.usable_oligos.sum():
+        if self.usable_oligos.sum() == 0:
             return 0
         return self.get_focused_oligos(onlyUsable).shape[0]
 
@@ -217,12 +226,13 @@ class OligoGroup(object):
 
     def expand_focus_to_n_oligos(self, n, verbose=True):
         # Expand the sub-window of interest to retrieve at least n oligos
-        assert not isinstance(self.focus_window, type(None))
+        if isinstance(self.focus_window, type(None)):
+            raise AssertionError
 
         if n <= self.get_n_focused_oligos():
             return
 
-        for i in range(n - self.get_n_focused_oligos()):
+        for _ in range(n - self.get_n_focused_oligos()):
             if not self.expand_focus_to_closest():
                 return
 
@@ -240,19 +250,22 @@ class OligoGroup(object):
 
     def expand_focus_by_step(self, step, verbose=True):
         # Expand the current focus window of a given step (in nt)
-        assert 0 < step
+        if step >= 0:
+            raise AssertionError
 
-        if self.focus_window[0] <= self._data["start"].min():
-            if self.focus_window[1] >= self._data["end"].max():
-                self.logger.warning(
-                    " ".join(
-                        [
-                            "Cannot expand the focus region any further ",
-                            "(all oligos already included)",
-                        ]
-                    )
+        if (
+            self.focus_window[0] <= self._data["start"].min()
+            and self.focus_window[1] >= self._data["end"].max()
+        ):
+            self.logger.warning(
+                " ".join(
+                    [
+                        "Cannot expand the focus region any further ",
+                        "(all oligos already included)",
+                    ]
                 )
-                return False
+            )
+            return False
 
         new_focus_start, new_focus_end = self.focus_window
         new_focus_start -= step / 2
@@ -266,18 +279,10 @@ class OligoGroup(object):
     def __get_focus_extremes(self):
         earl = self._data["start"].values < self.focus_window[0]
         max_start = self._data.loc[earl, "start"].max()
-        if 0 != earl.sum():
-            d_earl = self.focus_window[0] - max_start
-        else:
-            d_earl = np.inf
-
+        d_earl = self.focus_window[0] - max_start if earl.sum() != 0 else np.inf
         late = self._data["end"].values >= self.focus_window[1]
         min_end = self._data.loc[late, "end"].min()
-        if 0 != late.sum():
-            d_late = min_end - self.focus_window[1]
-        else:
-            d_late = np.inf
-
+        d_late = min_end - self.focus_window[1] if late.sum() != 0 else np.inf
         return (max_start, min_end, d_earl, d_late)
 
     def __set_focus_windows_for_inifinite_extreme(self):
@@ -319,7 +324,8 @@ class OligoGroup(object):
 
     def apply_threshold(self, threshold):
         # Unfocuses oligos with score higher than the threshold
-        assert threshold <= 1 and threshold >= 0
+        if threshold > 1 or threshold < 0:
+            raise AssertionError
         self._oligos_passing_score_filter = self._data["score"] <= threshold
 
     def reset_threshold(self):
@@ -337,32 +343,35 @@ class OligoGroup(object):
         c = 1
         while c <= safeN:
             passing_oData = oData.loc[oData["start"] > start, :]
-            if 0 == passing_oData.shape[0]:
+            if passing_oData.shape[0] == 0:
                 self.logger.info("Not enough oligos, skipped discard step.")
                 return False
             start = passing_oData["start"].values[0]
-            start += len(passing_oData["seq"].values[0]) + D
+            start += len(passing_oData["sequence"].values[0]) + D
             c += 1
 
         c = 1
         while c <= safeN:
             passing_oData = oData.loc[oData["end"] <= end]
-            if 0 == passing_oData.shape[-1]:
+            if passing_oData.shape[-1] == 0:
                 self.logger.info("Not enough oligos, skipped discard step.")
                 return False
             end = passing_oData["end"].values[-1]
-            end -= len(passing_oData["seq"].values[-1]) - D
+            end -= len(passing_oData["sequence"].values[-1]) - D
             c += 1
 
         return True
 
     def discard_focused_oligos_safeN(self, safeN, D):
         # Discard focused oligos that are neither the first nor the last safeN
-
         start = self.data.loc[self.oligos_in_focus_window, "start"].values[0]
-        start += len(self.data.loc[self.oligos_in_focus_window, "seq"].values[0]) + D
+        start += (
+            len(self.data.loc[self.oligos_in_focus_window, "sequence"].values[0]) + D
+        )
         end = self.data.loc[self.oligos_in_focus_window, "end"].values[-1]
-        end += len(self.data.loc[self.oligos_in_focus_window, "seq"].values[-1]) + D
+        end += (
+            len(self.data.loc[self.oligos_in_focus_window, "sequence"].values[-1]) + D
+        )
 
         if not self.__check_oligos_to_discard_safeN(safeN, start, end, D):
             return
@@ -389,3 +398,16 @@ class OligoGroup(object):
         self._oligos_passing_score_filter = self._oligos_passing_score_filter[
             keep_condition
         ]
+
+
+def select_by_GC(
+    oligos_list: List[Tuple[str, str]],
+    kmer_size: int,
+    gc_range: GCRange = GCRange(0.35, 0.85),
+) -> List[Tuple[str, str]]:
+    return [
+        (header, sequence)
+        for header, sequence in tqdm(oligos_list, desc="GC check", leave=False)
+        if (sequence.count("C") + sequence.count("G")) / kmer_size >= gc_range.low
+        and (sequence.count("C") + sequence.count("G")) / kmer_size <= gc_range.high
+    ]

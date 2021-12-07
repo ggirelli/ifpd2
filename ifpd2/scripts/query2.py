@@ -5,23 +5,21 @@
 
 import click  # type: ignore
 from ifpd2.const import CONTEXT_SETTINGS
-from ifpd2.dataclasses import Folder, GenomicRegion, FreeEnergyInterval
-from ifpd2.dataclasses import NonNegativeInteger, PositiveInteger
-from ifpd2.dataclasses import PositiveFloat
-from ifpd2.dataclasses import NonNegativeIntInterval
-from ifpd2.dataclasses import QueryFocus, QueryWindow
-from ifpd2.walker import Walker
+from ifpd2.dataclasses import Folder
+from ifpd2.dataclasses import PositiveInteger
+from ifpd2.dataclasses import QueryWindow
 from ifpd2.logging import add_log_file_handler
-from ifpd2.probe import OligoProbeBuilder
-from ifpd2.probe_set import OligoProbeSetBuilder
+from ifpd2.database import DataBase
+from ifpd2.region import GenomicRegionBuilder
+from ifpd2.walker2 import ChromosomeWalker
 import logging
-from os.path import isdir, isfile, join as path_join
+from os.path import isdir, isfile
 from os import mkdir
 from typing import Optional, Tuple
 
 
 @click.command(
-    name="query",
+    name="query2",
     context_settings=CONTEXT_SETTINGS,
     help="""Design FISH probes on a database chromosome.
     When a --region is not specified, the whole chromosome is used.
@@ -161,7 +159,7 @@ def main(
     dist: int,
     single: bool,
     window_size: Optional[int],
-    window_shift: float,
+    window_shift: Optional[float],
     focus_size: float,
     focus_step: float,
     off_targets: Tuple[int, int],
@@ -176,74 +174,55 @@ def main(
 ) -> None:
     settings = QuerySettings(db_folder, output_path)
 
-    if single:
-        probes = 1
-        window_shift = 1.0
-        window_size = None
-
-    if probes is None and window_size is None:
-        raise AssertionError
-    if region[1] <= 0:
-        probes = None
-        logging.info(
-            " ".join(
-                [
-                    "Cannot design a specific number of probes for queries on",
-                    "a whole chromosome/feature.",
-                ]
-            )
-        )
-
-    assert_reusable(settings.output_path)
+    probes, window_size, window_shift = check_input(
+        single, probes, window_size, window_shift
+    )
 
     if not isdir(settings.output_path):
         mkdir(settings.output_path)
     add_log_file_handler(f"{settings.output_path}/ifpd2-main.log")
 
-    opb = OligoProbeBuilder()
-    opb.N = PositiveInteger(oligos).n
-    opb.D = NonNegativeInteger(dist).n
-    opb.Tr = PositiveFloat(melting_half_width).n
-    opb.Ps = PositiveInteger(probe_size).n
-    opb.Ph = PositiveFloat(gap_size, 1).n
-    opb.Po = PositiveFloat(oligo_intersection, 1).n
-    opb.k = oligo_length
-    opb.F = NonNegativeIntInterval(*off_targets).astuple()
-    opb.Gs = FreeEnergyInterval(*free_energy).astuple()
-    opb.Ot = PositiveFloat(oligo_score_step, 1).n
+    DB = DataBase(settings.db_folder_path)
 
-    opsb = OligoProbeSetBuilder(path_join(settings.output_path, "probe_sets"))
-    logging.info(opb.get_prologue())
+    RB = GenomicRegionBuilder(DB.get_chromosome(chromosome.encode()))
+    if probes is not None:
+        region_set_list = RB.build_by_number(PositiveInteger(probes).n)
+    else:
+        window_size, window_shift = QueryWindow(window_size, window_shift).astuple()
+        if window_size is None or window_shift is None:
+            raise AssertionError
+        region_set_list = RB.build_by_size(window_size, window_shift)
 
-    ow = Walker(settings.db_folder_path)
-    ow.C = chromosome
-    genomic_region = GenomicRegion(*region)
-    ow.S = genomic_region.start
-    ow.E = max(genomic_region.end, genomic_region.start)
-    ow.X = 1 if probes is None else PositiveInteger(probes).n
-    window = QueryWindow(window_size, window_shift)
-    ow.Ws = window.size
-    ow.Wh = window.shift
-    focus = QueryFocus(focus_size, focus_step)
-    ow.Rs = focus.size
-    ow.Rt = focus.step
-    ow.out_path = settings.output_path
-    ow.reuse = False
-    ow.threads = PositiveInteger(threads).n
+    walker = ChromosomeWalker(DB, chromosome.encode())
+    walker.walk_multiple_regions(region_set_list)
 
-    ow.start(
-        start_from_nt=genomic_region.start,
-        end_at_nt=genomic_region.end,
-        N=opb.N,
-        opb=opb,
-        cfr_step=ow.Rt,
-    )
-
-    opsb.build(ow.walk_results)
-    opsb.export()
+    # print((DB, RB, walker, region_set_list))
 
     logging.info("Done. :thumbs_up: :smiley:")
     logging.shutdown()
+
+
+def check_input(
+    single: bool,
+    probes: Optional[int],
+    window_size: Optional[int],
+    window_shift: Optional[float],
+) -> Tuple[Optional[int], Optional[int], Optional[float]]:
+    if single:
+        probes = 1
+        window_shift = None
+        window_size = None
+
+    if probes is None and window_size is None:
+        raise AssertionError
+    if probes is not None and window_size is not None:
+        logging.warning("cannot combine -X and -W. Using -X.")
+        window_size = None
+        window_shift = None
+    if window_size is not None and window_shift is None:
+        window_shift = 1
+
+    return (probes, window_size, window_shift)
 
 
 class QuerySettings:
